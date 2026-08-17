@@ -15,13 +15,13 @@
 
 | 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
 |------|-------------|---------|------------|
-| dealnews.com | `https://www.dealnews.com/rss.xml` | 独立编辑型 | 页面有评论数，RSS 不含 |
+| dealnews.com | `https://www.dealnews.com/?rss=1` | 独立编辑型 | 页面有评论数，RSS 不含 |
 | slickdeals.net | `https://slickdeals.net/rss/` | 社区型(Pepper) | 帖子有投票/评论，RSS 含部分 |
 | dealseek.com | `https://www.dealseek.com/feed/` | 聚合型 | 互动数据有限 |
 | techbargains.com | `https://www.techbargains.com/rss.xml` | 编辑型 | 页面有评论 |
 | myvipon.com | `https://www.myvipon.com/feed/` | Amazon 折扣 | 互动数据有限 |
 | koupon.ai | `https://koupon.ai/feed/` | AI 折扣 | 互动数据有限 |
-| dealsofamerica.com | `https://www.dealsofamerica.com/rss.php` | 编辑型 | 互动数据有限 |
+| dealsofamerica.com | `https://www.dealsofamerica.com/arss.xml` | 编辑型 | 互动数据有限 |
 | bensbargains.com | `https://bensbargains.com/feed/` | 编辑型 | 页面有评论 |
 | freestufffinder.com | `https://freestufffinder.com/feed/` | WordPress | 页面有评论 |
 | edealinfo.com | `https://www.edealinfo.com/rss.xml` | 编辑型 | 互动数据有限 |
@@ -71,7 +71,7 @@
 | mydealz.de | `https://www.mydealz.de/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
 | mytopdeals.net | `https://www.mytopdeals.net/feed/` | 聚合型 | 互动数据有限 |
 | sparbote.de | `https://www.sparbote.de/feed/` | 编辑型 | 互动数据有限 |
-| dealonkel.de | `https://www.dealonkel.de/feed/` | 编辑型 | 互动数据有限 |
+| dealonkel.de | `https://www.dealonkel.de/rss.xml` | 编辑型 | 互动数据有限 |
 
 ---
 
