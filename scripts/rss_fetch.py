@@ -268,11 +268,30 @@ def parse_rss_xml(xml_bytes, site, keyword_lower_list):
                     summary = unescape(re.sub(r"<[^>]+>", "", child.text)).strip()
                     break
 
-        comments = ""
+        # 评论链接和评论数（WordPress 有 <comments>链接 和 <slash:comments>数字）
+        comments_link = ""
+        comments_count = ""
         for child in item:
-            if child.tag.endswith("comments") and child.text:
-                comments = child.text.strip()
-                break
+            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+            if tag == "comments" and child.text:
+                if child.text.strip().isdigit():
+                    comments_count = child.text.strip()
+                else:
+                    comments_link = child.text.strip()
+            elif tag == "commentRss" and child.text:
+                comments_link = child.text.strip()
+
+        # 温度/投票（Pepper RSS 可能不含，标注需浏览器补全）
+        temperature = ""
+        votes = ""
+        for child in item:
+            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+            if "temperature" in tag.lower() or "hot" in tag.lower():
+                temperature = child.text.strip() if child.text else ""
+            elif "vote" in tag.lower() or "score" in tag.lower():
+                votes = child.text.strip() if child.text else ""
+
+        needs_browser = site.get("pepper", False) or site.get("proxy", False)
 
         text_blob = (title + " " + summary).lower()
         matched = [kw for kw in keyword_lower_list if kw in text_blob]
@@ -281,7 +300,12 @@ def parse_rss_xml(xml_bytes, site, keyword_lower_list):
                 "site": site["name"], "domain": site["domain"],
                 "country": site["country"].upper(), "title": title,
                 "link": link, "pub_date": pub_date,
-                "summary": summary[:500], "comments_rss": comments,
+                "summary": summary[:500],
+                "comments_count": comments_count,
+                "comments_link": comments_link,
+                "temperature": temperature,
+                "votes": votes,
+                "needs_browser": needs_browser,
                 "matched_keywords": matched,
             })
     return results
@@ -309,7 +333,12 @@ def parse_rss_json(json_bytes, site, keyword_lower_list):
                 "site": site["name"], "domain": site["domain"],
                 "country": site["country"].upper(), "title": title,
                 "link": link, "pub_date": pub_date,
-                "summary": summary[:500], "comments_rss": comments,
+                "summary": summary[:500],
+                "comments_count": str(item.get("comments", "")),
+                "comments_link": "",
+                "temperature": "",
+                "votes": "",
+                "needs_browser": site.get("pepper", False) or site.get("proxy", False),
                 "matched_keywords": matched,
             })
     return results
@@ -348,7 +377,12 @@ def search_google_news(site, keywords, timeout=15):
                 "site": site["name"], "domain": site["domain"],
                 "country": site["country"].upper(), "title": title,
                 "link": link, "pub_date": pub_date,
-                "summary": summary[:500], "comments_rss": "",
+                "summary": summary[:500],
+                "comments_count": "",
+                "comments_link": "",
+                "temperature": "",
+                "votes": "",
+                "needs_browser": True,
                 "matched_keywords": matched,
                 "source": "google_news_fallback",
             })
@@ -460,10 +494,12 @@ def main():
     if args.output == "csv":
         import csv
         w = csv.writer(sys.stdout)
-        w.writerow(["country", "site", "domain", "title", "link", "pub_date", "comments_rss", "matched_keywords", "summary"])
+        w.writerow(["country", "site", "domain", "title", "link", "pub_date", "comments_count", "temperature", "votes", "needs_browser", "matched_keywords", "summary"])
         for p in unique:
             w.writerow([p["country"], p["site"], p["domain"], p["title"], p["link"],
-                        p["pub_date"], p["comments_rss"], "|".join(p["matched_keywords"]), p["summary"][:200]])
+                        p["pub_date"], p.get("comments_count",""), p.get("temperature",""),
+                        p.get("votes",""), p.get("needs_browser",False),
+                        "|".join(p["matched_keywords"]), p["summary"][:200]])
     else:
         print(json.dumps(output, ensure_ascii=False, indent=2))
 

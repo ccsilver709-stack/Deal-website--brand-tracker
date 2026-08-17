@@ -39,7 +39,12 @@ python scripts/rss_fetch.py -k "品牌词1" -k "品牌词2" -c us,de,uk --timeou
 - `--output json|csv`：输出格式，默认 JSON
 - `--search-fallback`：RSS 失败的站点自动用 Google News 搜索回退，覆盖更全但结果可能不精准
 
-脚本纯 Python 标准库，无第三方依赖。输出 JSON 包含 `posts` 数组，每条含 site/domain/country/title/link/pub_date/summary/comments_rss/matched_keywords。
+脚本纯 Python 标准库，无第三方依赖。输出 JSON 包含 `posts` 数组，每条含：
+- `site/domain/country/title/link/pub_date/summary` — 基础信息
+- `comments_count` — 评论数（WordPress 站已自动从 RSS 提取）
+- `temperature` — 温度/热度（Pepper 站为空，需第二步补全）
+- `votes` — 点赞/投票数（Pepper 站为空，需第二步补全）
+- `needs_browser` — `true`=必须浏览器补全，`false`=数据已齐全
 
 #### 方式 B：手动请求 RSS（无脚本环境时）
 
@@ -61,25 +66,26 @@ https://www.<域名>/rss/search?q=<关键词>
 
 ---
 
-### 第二步：补全互动数据
+### 第二步：自动补全互动数据（必须执行，不得跳过）
 
-RSS 通常只含标题/链接/时间/摘要，**热度、评论数、点赞数需要访问原帖页面提取**。
+脚本输出每条帖子含互动字段：
+- `comments_count`：评论数（WordPress 站已自动从 RSS 提取，直接用）
+- `temperature`：温度/热度（Pepper 站为空，需浏览器提取）
+- `votes`：点赞/投票数（Pepper 站为空，需浏览器提取）
+- `needs_browser`：`true`=必须用浏览器打开原帖补全，`false`=数据已齐全可跳过
 
-对每条匹配帖子，打开 `link` 对应的网页，提取以下数据：
+**对每条 `needs_browser: true` 的帖子，必须用浏览器打开 `link` 提取：**
 
-| 数据项 | 提取位置说明 |
-|-------|------------|
-| **热度/温度** | Pepper 站页面显示火焰图标 + 数字（如 🔥 120°）；其他站可能无此字段 |
-| **点赞/投票** | Pepper 站显示净投票数（如 +58）；Reddit 显示 upvotes；社区型站有 thumbs up/down |
-| **评论数** | 页面评论区标题或评论图标旁数字 |
-| **Deal 价格** | 帖子标题或正文中的价格（如 "$29.99"、"€199"、"£149"） |
-| **原价** | 正文中划掉的原价（如 "$49.99"） |
-| **帖子类型** | 热门帖(Hot)/新帖(New)/过期帖(Expired)，Pepper 站有标签 |
+| 数据项 | 提取位置 |
+|-------|---------|
+| 热度/温度 | Pepper 站火焰图标 + 数字（如 🔥 120°） |
+| 点赞/投票 | Pepper 站净投票数（如 +58）；Reddit 显示 upvotes |
+| 评论数 | 评论区图标旁数字（脚本已有 comments_count 则直接用） |
+| Deal 价格 | 标题或正文中的价格 |
+| 原价 | 正文中划掉的原价 |
+| 帖子类型 | Hot / New / Expired |
 
-**操作要点**：
-- 互动数据通常在帖子标题下方或侧边栏，首屏即可见
-- 如遇登录墙，提示用户手动登录后刷新，或跳过该帖标注"需登录"
-- 匹配帖子超过 20 条时，优先处理 Pepper 网络站和高流量站（Slickdeals/MyDealz/HotUKDeals/Dealabs/Chollometro/Reddit/OzBargain），小型编辑型站互动数据有限可填"—"
+操作：浏览器打开帖子链接，页面加载后提取；遇 Cloudflare 验证等待几秒或刷新；匹配超 20 条时优先处理 Pepper 高流量站，小站可填"—"。
 
 ---
 
@@ -178,5 +184,6 @@ Pepper 网络页面结构统一，打开帖子后：
 2. **关键词语言适配**：监测非英语国家站点时，同时传入当地语言关键词（如德国站加德语词、法国站加法语词），匹配率更高。
 3. **多品牌词**：`-k` 可多次传入，对标题+摘要做 OR 匹配，任一命中即收录。
 4. **时效**：RSS 通常只返回最近 20-100 条帖子，适合监测近期（通常 7 天内）deal。如需历史数据，用站内搜索。
-5. **Reddit 扩展**：默认只扫 r/deals，如需特定 subreddit（如 r/buildapcsales），将 RSS URL 替换为 `https://www.reddit.com/r/<sub>/.rss`。
-6. **纯文本环境降级**：如果无法访问网络或运行脚本，向用户提供站点清单和搜索 URL 模板，指导用户手动检索后将结果粘贴回来整理。
+5. **互动数据自动提取**：WordPress 站（Hip2Save/DansDeals/Mein-Deal 等 20+ 站）评论数已从 RSS 自动提取；Pepper 网络站温度/投票必须浏览器打开页面提取，脚本会用 `needs_browser: true` 标记。
+6. **Reddit 扩展**：默认只扫 r/deals，如需特定 subreddit（如 r/buildapcsales），将 RSS URL 替换为 `https://www.reddit.com/r/<sub>/.rss`。
+7. **纯文本环境降级**：如果无法访问网络或运行脚本，向用户提供站点清单和搜索 URL 模板，指导用户手动检索后将结果粘贴回来整理。
