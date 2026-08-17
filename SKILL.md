@@ -37,6 +37,7 @@ python scripts/rss_fetch.py -k "品牌词1" -k "品牌词2" -c us,de,uk --timeou
 - `-c` / `--countries`：国家代码过滤，逗号分隔（us,ca,de,uk,fr,it,es,mx,pl,br,au），不传则扫全部
 - `--timeout`：单站请求超时秒数，默认 12
 - `--output json|csv`：输出格式，默认 JSON
+- `--search-fallback`：RSS 失败的站点自动用 Google News 搜索回退，覆盖更全但结果可能不精准
 
 脚本纯 Python 标准库，无第三方依赖。输出 JSON 包含 `posts` 数组，每条含 site/domain/country/title/link/pub_date/summary/comments_rss/matched_keywords。
 

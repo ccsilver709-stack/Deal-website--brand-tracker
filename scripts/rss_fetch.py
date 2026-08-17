@@ -46,7 +46,6 @@ SITES = [
     {"domain": "shopsale.com", "country": "us", "name": "ShopSale", "rss_url": "https://www.shopsale.com/rss.php", "pepper": False, "proxy": True},
     {"domain": "fabulesslyfrugal.com", "country": "us", "name": "Fabulessly Frugal", "rss_url": "https://fabulesslyfrugal.com/feed/", "pepper": False, "proxy": False},
     {"domain": "dansdeals.com", "country": "us", "name": "DansDeals", "rss_url": "https://www.dansdeals.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealsplus.com", "country": "us", "name": "DealsPlus", "rss_url": "https://www.dealsplus.com/rss", "pepper": False, "proxy": False},
     {"domain": "reddit.com", "country": "us", "name": "Reddit r/deals", "rss_url": "https://www.reddit.com/r/deals/.rss", "pepper": False, "proxy": False},
     {"domain": "struggleville.net", "country": "us", "name": "Struggleville", "rss_url": "https://www.struggleville.net/feed/", "pepper": False, "proxy": False},
     {"domain": "dealam.com", "country": "us", "name": "DealAM", "rss_url": "https://www.dealam.com/rss.xml", "pepper": False, "proxy": False},
@@ -316,6 +315,46 @@ def parse_rss_json(json_bytes, site, keyword_lower_list):
     return results
 
 
+def search_google_news(site, keywords, timeout=15):
+    """Google News RSS 搜索回退：对无 RSS 或反爬严格的站点，用 site: 搜索获取帖子"""
+    query = quote_plus(f"site:{site['domain']} {' '.join(keywords)}")
+    url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return []
+            data = resp.read()
+    except Exception:
+        return []
+
+    results = []
+    try:
+        root = ET.fromstring(data)
+        items = root.findall(".//item")
+    except ET.ParseError:
+        return []
+
+    for item in items[:20]:
+        title = item.findtext("title", "")
+        link = item.findtext("link", "")
+        pub_date = item.findtext("pubDate", "")
+        summary = unescape(re.sub(r"<[^>]+>", "", item.findtext("description", ""))).strip()
+
+        text_blob = (title + " " + summary).lower()
+        matched = [kw for kw in keywords if kw in text_blob]
+        if matched:
+            results.append({
+                "site": site["name"], "domain": site["domain"],
+                "country": site["country"].upper(), "title": title,
+                "link": link, "pub_date": pub_date,
+                "summary": summary[:500], "comments_rss": "",
+                "matched_keywords": matched,
+                "source": "google_news_fallback",
+            })
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Deal 站品牌关键词 RSS 监测 v2")
     parser.add_argument("--keyword", "-k", action="append", required=True)
@@ -323,6 +362,8 @@ def main():
     parser.add_argument("--max-items", type=int, default=100)
     parser.add_argument("--timeout", type=int, default=12)
     parser.add_argument("--output", choices=["json", "csv"], default="json")
+    parser.add_argument("--search-fallback", action="store_true",
+                        help="RSS 失败的站点用 Google News 搜索回退（覆盖更全但结果可能不精准）")
     args = parser.parse_args()
 
     keywords = [kw.strip().lower() for kw in args.keyword if kw.strip()]
@@ -339,13 +380,23 @@ def main():
         sites_to_check = [s for s in SITES if s["country"] in countries]
 
     all_matches = []
+    failed_sites = []
     stats = {"total": len(sites_to_check), "success": 0, "failed": 0, "matches": 0,
-             "by_source": {"direct": 0, "proxy": 0, "fallback": 0, "discovered": 0}}
+             "by_source": {"direct": 0, "proxy": 0, "fallback": 0, "discovered": 0, "google_news": 0}}
 
     for site in sites_to_check:
         content, used_url, source = get_rss_content(site, keywords, args.timeout)
         if content is None:
+            # Google News 搜索回退
+            if args.search_fallback:
+                gn_matches = search_google_news(site, keywords, args.timeout)
+                if gn_matches:
+                    all_matches.extend(gn_matches[:args.max_items])
+                    stats["matches"] += len(gn_matches[:args.max_items])
+                    stats["by_source"]["google_news"] += 1
+                    continue
             stats["failed"] += 1
+            failed_sites.append(site["domain"])
             continue
 
         stats["success"] += 1
@@ -398,8 +449,10 @@ def main():
 
     output = {
         "query": {"keywords": args.keyword, "countries": args.countries or "all",
-                  "generated_at": datetime.now(timezone.utc).isoformat()},
+                  "generated_at": datetime.now(timezone.utc).isoformat(),
+                  "search_fallback": args.search_fallback},
         "stats": stats,
+        "failed_sites": failed_sites,
         "total_matches": len(unique),
         "posts": unique,
     }
