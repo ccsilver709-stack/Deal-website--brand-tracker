@@ -27,6 +27,43 @@ python scripts/rss_fetch.py -k anker -k navimow -c us,de,uk
 
 把 `SKILL.md` 丢给任何 AI 助手（ChatGPT / Claude / Doubao 等），它会按流程自动完成 RSS 抓取 + 互动数据补全 + 表格输出。
 
+## 支持的站点（11 国 62 站）
+
+### 美国（25 站）
+DealNews、Slickdeals、DealSeek、TechBargains、MyVipon、Koupon.ai、Deals of America、BensBargains、Free Stuff Finder、eDealInfo、1Sale、DealWiki、21usDeal、iHotOffers、SwagGrabber、ShopSale、Fabulessly Frugal、DansDeals、DealsPlus、Reddit(r/deals)、Struggleville、DealAM、SimplexDeals、Money Saving Mom、Hip2Save
+
+### 加拿大（2 站）
+SaveaLoonie、RedFlagDeals
+
+### 德国（10 站）
+Dealgott、Mein-Deal、DealBunny、Snipz、MonsterDealz、DealDoktor、MyDealz、MyTopDeals、Sparbote、Dealonkel
+
+### 英国（2 站）
+HotUKDeals、LatestDeals
+
+### 法国（3 站）
+Dealabs、SerialDealer、Bons Plans Malins
+
+### 意大利（4 站）
+Scontify、BestDiscount、WikiDeal、TuttoTek
+
+### 西班牙（8 站）
+Chollometro、SuperChollos、Cholloterapia、SoyDeChollos、MiChollo、ChollosChina、MePicaElChollo、NoLoDejesEscapar
+
+### 墨西哥（2 站）
+Promodescuentos、Megadescuentos
+
+### 波兰（2 站）
+Pepper.pl、HotShops
+
+### 巴西（3 站）
+Gatry、Promobit、Pelando
+
+### 澳大利亚（1 站）
+OzBargain
+
+> 其中 Slickdeals、RedFlagDeals、MyDealz、HotUKDeals、Dealabs、Chollometro、Promodescuentos、Pepper.pl、Pelando、Promobit 属于 Pepper 网络，支持关键词搜索 RSS，命中率最高。
+
 ## 文件说明
 
 ```
