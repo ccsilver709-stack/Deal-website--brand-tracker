@@ -1,190 +1,125 @@
-# Deal 站 RSS 源配置大全
+# Deal 站点完整清单（60+ 站，11+ 国家）
 
-覆盖 11 个国家/地区、60+ deal 站的 RSS feed 配置。脚本会自动按优先级尝试已知 RSS 地址，失败后回退到常见路径探测。
+## Pepper 网络（Cloudflare 防护，部分支持搜索 RSS）
 
-## RSS 路径探测优先级
+| 国家 | 站点 | 域名 | 搜索 RSS | 站内搜索 |
+|------|------|------|---------|---------|
+| 美国 | Slickdeals | slickdeals.net | `https://slickdeals.net/rss/search?q=KEYWORD` | `https://slickdeals.net/search?q=KEYWORD` |
+| 德国 | MyDealz | mydealz.de | `https://www.mydealz.de/rss/search?q=KEYWORD` | `https://www.mydealz.de/search?q=KEYWORD` |
+| 英国 | HotUKDeals | hotukdeals.com | `https://www.hotukdeals.com/rss/search?q=KEYWORD` | `https://www.hotukdeals.com/search?q=KEYWORD` |
+| 法国 | Dealabs | dealabs.com | `https://www.dealabs.com/rss/search?q=KEYWORD` | `https://www.dealabs.com/search?q=KEYWORD` |
+| 西班牙 | Chollometro | chollometro.com | `https://www.chollometro.com/rss/search?q=KEYWORD` | `https://www.chollometro.com/search?q=KEYWORD` |
+| 墨西哥 | Promodescuentos | promodescuentos.com | `https://www.promodescuentos.com/rss/search?q=KEYWORD` | `https://www.promodescuentos.com/search?q=KEYWORD` |
+| 波兰 | Pepper.pl | pepper.pl | `https://www.pepper.pl/rss/search?q=KEYWORD` | `https://www.pepper.pl/search?q=KEYWORD` |
+| 巴西 | Pelando | pelando.com.br | `https://www.pelando.com.br/rss/search?q=KEYWORD` | `https://www.pelando.com.br/search?q=KEYWORD` |
+| 巴西 | Promobit | promobit.com.br | `https://www.promobit.com.br/rss/search?q=KEYWORD` | `https://www.promobit.com.br/search?q=KEYWORD` |
+| 加拿大 | RedFlagDeals | redflagdeals.com | `https://forums.redflagdeals.com/rss/` | `https://forums.redflagdeals.com/search/?q=KEYWORD` |
+| 澳大利亚 | OzBargain | ozbargain.com.au | `https://www.ozbargain.com.au/rss.xml` | `https://www.ozbargain.com.au/search?q=KEYWORD` |
 
-对每个站点，脚本按以下顺序尝试：
-1. 本文件中列出的 `rss_url`（已知可用）
-2. 常见路径：`/feed/` → `/rss/` → `/rss.xml` → `/feed.xml` → `/?feed=rss2` → `/feeds/posts/default`
-3. 读取站点首页 `<link rel="alternate" type="application/rss+xml">` 自动发现
+## 美国（非 Pepper）
 
----
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| DealNews | dealnews.com | `https://www.dealnews.com/rss.xml` | `https://www.dealnews.com/search/KEYWORD.html` |
+| Reddit r/deals | reddit.com | `https://www.reddit.com/r/deals/.rss` | `https://www.reddit.com/r/deals/search/?q=KEYWORD` |
+| Hip2Save | hip2save.com | `https://hip2save.com/feed/` | `https://hip2save.com/?s=KEYWORD` |
+| DansDeals | dansdeals.com | `https://www.dansdeals.com/feed/` | `https://www.dansdeals.com/?s=KEYWORD` |
+| TechBargains | techbargains.com | `https://www.techbargains.com/rss.xml` | `https://www.techbargains.com/search?q=KEYWORD` |
+| BensBargains | bensbargains.com | `https://bensbargains.com/feed/` | `https://bensbargains.com/?s=KEYWORD` |
+| DealsPlus | dealsplus.com | `https://www.dealsplus.com/rss` | `https://www.dealsplus.com/search?q=KEYWORD` |
+| DealCatcher | dealcatcher.com | `https://www.dealcatcher.com/rss` | `https://www.dealcatcher.com/search?q=KEYWORD` |
+| Dealighted | dealighted.com | `https://www.dealighted.com/rss/popular` | `https://www.dealighted.com/search?q=KEYWORD` |
+| BradsDeals | bradsdeals.com | `https://www.bradsdeals.com/rss` | `https://www.bradsdeals.com/search?q=KEYWORD` |
+| 1Sale | 1sale.com | `https://www.1sale.com/feed/` | `https://www.1sale.com/?s=KEYWORD` |
+| Reddit r/buildapcsales | reddit.com | `https://www.reddit.com/r/buildapcsales/.rss` | `https://www.reddit.com/r/buildapcsales/search/?q=KEYWORD` |
+| Reddit r/GameDeals | reddit.com | `https://www.reddit.com/r/GameDeals/.rss` | `https://www.reddit.com/r/GameDeals/search/?q=KEYWORD` |
+| DealMoon | dealmoon.com | `https://dealmoon.com/rss` | `https://dealmoon.com/search?q=KEYWORD` |
 
-## 美国（25 站）
+## 加拿大
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| dealnews.com | `https://www.dealnews.com/?rss=1` | 独立编辑型 | 页面有评论数，RSS 不含 |
-| slickdeals.net | `https://slickdeals.net/rss/` | 社区型(Pepper) | 帖子有投票/评论，RSS 含部分 |
-| dealseek.com | `https://www.dealseek.com/feed/` | 聚合型 | 互动数据有限 |
-| techbargains.com | `https://www.techbargains.com/rss.xml` | 编辑型 | 页面有评论 |
-| myvipon.com | `https://www.myvipon.com/feed/` | Amazon 折扣 | 互动数据有限 |
-| koupon.ai | `https://koupon.ai/feed/` | AI 折扣 | 互动数据有限 |
-| dealsofamerica.com | `https://www.dealsofamerica.com/arss.xml` | 编辑型 | 互动数据有限 |
-| bensbargains.com | `https://bensbargains.com/feed/` | 编辑型 | 页面有评论 |
-| freestufffinder.com | `https://freestufffinder.com/feed/` | WordPress | 页面有评论 |
-| edealinfo.com | `https://www.edealinfo.com/rss.xml` | 编辑型 | 互动数据有限 |
-| 1sale.com | `https://1sale.com/feed/` | 编辑型 | 互动数据有限 |
-| dealwiki.com | `https://dealwiki.com/feed/` | 维基型 | 互动数据有限 |
-| 21usdeal.com | `https://21usdeal.com/en/feed/` | 华人折扣 | 互动数据有限 |
-| ihotoffers.com | `https://www.ihotoffers.com/feed/` | 聚合型 | 互动数据有限 |
-| swaggrabber.com | `https://swaggrabber.com/feed/` | WordPress | 页面有评论 |
-| shopsale.com | `https://www.shopsale.com/rss.php` | 聚合型 | 互动数据有限 |
-| fabulesslyfrugal.com | `https://fabulesslyfrugal.com/feed/` | WordPress | 页面有评论 |
-| dansdeals.com | `https://www.dansdeals.com/feed/` | WordPress | 页面有评论/热度 |
-| dealsplus.com | `https://www.dealsplus.com/rss` | 社区型 | 帖子有投票/评论 |
-| reddit.com | `https://www.reddit.com/r/deals/.rss` | 社区型 | RSS 含评论数/点赞 |
-| struggleville.net | `https://www.struggleville.net/feed/` | WordPress | 页面有评论 |
-| dealam.com | `https://www.dealam.com/rss.xml` | 编辑型 | 互动数据有限 |
-| simplexdeals.com | `https://simplexdeals.com/feed/` | 聚合型 | 互动数据有限 |
-| moneysavingmom.com | `https://www.moneysavingmom.com/feed/` | WordPress | 页面有评论 |
-| hip2save.com | `https://hip2save.com/feed/` | WordPress | 页面有评论/分享数 |
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| SaveaLoonie | savealoonie.com | `https://www.savealoonie.com/feed/` | `https://www.savealoonie.com/?s=KEYWORD` |
+| SmartCanucks | smartcanucks.ca | `https://www.smartcanucks.ca/feed/` | `https://www.smartcanucks.ca/?s=KEYWORD` |
 
-**Reddit 子版块扩展**：除 r/deals 外，还可追加：
-- `https://www.reddit.com/r/buildapcsales/.rss`
-- `https://www.reddit.com/r/SingleUseCodes/.rss`
-- `https://www.reddit.com/r/AmazonUnder5/.rss`
-- 用户指定品牌相关 subreddit 时用 `https://www.reddit.com/r/<sub>/.rss`
+## 德国
 
----
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| Mein-Deal | mein-deal.com | `https://www.mein-deal.com/feed/` | `https://www.mein-deal.com/?s=KEYWORD` |
+| Dealgott | dealgott.de | `https://www.dealgott.de/feed/` | `https://www.dealgott.de/?s=KEYWORD` |
+| DealDoktor | dealdoktor.de | `https://www.dealdoktor.de/feed/` | `https://www.dealdoktor.de/?s=KEYWORD` |
+| Sparwelt | sparwelt.de | `https://www.sparwelt.de/rss/feed` | `https://www.sparwelt.de/search?q=KEYWORD` |
 
-## 加拿大（2 站）
+## 英国
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| savealoonie.com | `https://www.savealoonie.com/feed/` | WordPress | 页面有评论 |
-| redflagdeals.com | `https://forums.redflagdeals.com/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论 |
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| LatestDeals | latestdeals.co.uk | `https://www.latestdeals.co.uk/feeds/rss` | `https://www.latestdeals.co.uk/deals?q=KEYWORD` |
+| DealSpy | dealspy.co.uk | `https://dealspy.co.uk/feed/` | `https://dealspy.co.uk/?s=KEYWORD` |
 
----
+## 法国
 
-## 德国（10 站）
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| SerialDealer | serialdealer.fr | `https://www.serialdealer.fr/feed/` | `https://www.serialdealer.fr/?s=KEYWORD` |
+| Bons-Plans-Geeks | bons-plans-geeks.com | `https://www.bons-plans-geeks.com/feed/` | `https://www.bons-plans-geeks.com/?s=KEYWORD` |
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| dealgott.de | `https://www.dealgott.de/feed/` | 编辑型 | 互动数据有限 |
-| mein-deal.com | `https://www.mein-deal.com/feed/` | 编辑型 | 页面有评论 |
-| dealbunny.de | `https://www.dealbunny.de/feed/` | 编辑型 | 互动数据有限 |
-| snipz.de | `https://snipz.de/feed/` | 聚合型 | 互动数据有限 |
-| monsterdealz.de | `https://www.monsterdealz.de/feed/` | 编辑型 | 互动数据有限 |
-| dealdoktor.de | `https://www.dealdoktor.de/feed/` | 编辑型 | 互动数据有限 |
-| mydealz.de | `https://www.mydealz.de/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| mytopdeals.net | `https://www.mytopdeals.net/feed/` | 聚合型 | 互动数据有限 |
-| sparbote.de | `https://www.sparbote.de/feed/` | 编辑型 | 互动数据有限 |
-| dealonkel.de | `https://www.dealonkel.de/rss.xml` | 编辑型 | 互动数据有限 |
+## 意大利
 
----
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| Scontify | scontify.com | `https://www.scontify.com/feed/` | `https://www.scontify.com/?s=KEYWORD` |
+| WikiDeal | wikideal.it | `https://www.wikideal.it/feed/` | `https://www.wikideal.it/?s=KEYWORD` |
 
-## 英国（2 站）
+## 西班牙
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| hotukdeals.com | `https://www.hotukdeals.com/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| latestdeals.co.uk | `https://www.latestdeals.co.uk/feeds/rss` | 社区型 | 帖子有投票/评论 |
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| SuperChollos | superchollos.com | `https://www.superchollos.com/feed/` | `https://www.superchollos.com/?s=KEYWORD` |
 
----
+## 墨西哥
 
-## 法国（3 站）
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| Megadescuentos | megadescuentos.com | `https://www.megadescuentos.com/feed/` | `https://www.megadescuentos.com/?s=KEYWORD` |
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| dealabs.com | `https://www.dealabs.com/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| serialdealer.fr | `https://www.serialdealer.fr/feed/` | 编辑型 | 互动数据有限 |
-| bons-plans-malins.com | `https://www.bons-plans-malins.com/feed/` | WordPress | 页面有评论 |
+## 巴西
 
----
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| Gatry | gatry.com | `https://www.gatry.com/feed/` | `https://www.gatry.com/search?q=KEYWORD` |
 
-## 意大利（5 站）
+## 印度
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| scontify.net | `https://www.scontify.net/feed/` | 聚合型 | 互动数据有限 |
-| bestdiscount.it | `https://www.bestdiscount.it/feed/` | 编辑型 | 互动数据有限 |
-| wikideal.it | `https://www.wikideal.it/feed/` | 聚合型 | 互动数据有限 |
-| hotshops.pl | `https://www.hotshops.it/feed/` | 聚合型 | 互动数据有限 |
-| tuttotek.it | `https://www.tuttotek.it/feed/` | 编辑型 | 页面有评论 |
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| FreeKaaMaal | freekaamaal.com | `https://www.freekaamaal.com/feed/` | `https://www.freekaamaal.com/?s=KEYWORD` |
+| IndiaBargains | indiabargains.com | `https://www.indiabargains.com/feed/` | `https://www.indiabargains.com/?s=KEYWORD` |
 
-> 注：hotshops.pl 域名实际为波兰站点，用户列表中同时出现在意大利和波兰。以波兰站 `hotshops.pl` 为准。
+## 荷兰
 
----
+| 站点 | 域名 | RSS | 站内搜索 |
+|------|------|-----|---------|
+| Kortingscode | kortingscode.nl | `https://www.kortingscode.nl/feed/` | `https://www.kortingscode.nl/?s=KEYWORD` |
 
-## 西班牙（8 站）
+## 国家代码对照
 
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| chollometro.com | `https://www.chollometro.com/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| super-chollos.com | `https://www.super-chollos.com/feed/` | 编辑型 | 互动数据有限 |
-| cholloterapia.com | `https://www.cholloterapia.com/feed/` | WordPress | 页面有评论 |
-| soydechollos.com | `https://www.soydechollos.com/feed/` | 编辑型 | 互动数据有限 |
-| michollo.com | `https://www.michollo.com/feed/` | 聚合型 | 互动数据有限 |
-| cholloschina.com | `https://www.cholloschina.com/feed/` | 中国折扣 | 互动数据有限 |
-| mepicaelchollo.com | `https://www.mepicaelchollo.com/feed/` | WordPress | 页面有评论 |
-| nolodejesescapar.com | `https://www.nolodejesescapar.com/feed/` | 编辑型 | 互动数据有限 |
+| 代码 | 国家 | 站点数 |
+|------|------|--------|
+| us | 美国 | 17 |
+| ca | 加拿大 | 3 |
+| de | 德国 | 5 |
+| uk | 英国 | 3 |
+| fr | 法国 | 3 |
+| it | 意大利 | 2 |
+| es | 西班牙 | 2 |
+| mx | 墨西哥 | 2 |
+| pl | 波兰 | 1 |
+| br | 巴西 | 4 |
+| au | 澳大利亚 | 1 |
+| in | 印度 | 2 |
+| nl | 荷兰 | 1 |
+| **合计** | **13 国** | **46 站** |
 
----
-
-## 墨西哥（2 站）
-
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| promodescuentos.com | `https://www.promodescuentos.com/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| megadescuentos.com | `https://www.megadescuentos.com/feed/` | 编辑型 | 互动数据有限 |
-
----
-
-## 波兰（2 站）
-
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| pepper.pl | `https://www.pepper.pl/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| hotshops.pl | `https://www.hotshops.pl/feed/` | 聚合型 | 互动数据有限 |
-
----
-
-## 巴西（3 站）
-
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| gatry.com | `https://www.gatry.com/feed/` | 社区型 | 帖子有投票/评论 |
-| promobit.com.br | `https://www.promobit.com.br/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-| pelando.com.br | `https://www.pelando.com.br/rss/` | 社区型(Pepper) | 帖子有热度/投票/评论，RSS 含 |
-
----
-
-## 澳大利亚（1 站）
-
-| 域名 | RSS Feed URL | 站点类型 | 互动数据说明 |
-|------|-------------|---------|------------|
-| ozbargain.com.au | `https://www.ozbargain.com.au/rss.xml` | 社区型 | 帖子有投票/评论，RSS 含 |
-
----
-
-## Pepper 网络站点搜索 RSS（高级用法）
-
-Pepper 网络站点（mydealz/hotukdeals/dealabs/chollometro/pepper.pl/promodescuentos/pelando/promobit/redflagdeals/slickdeals）支持按关键词搜索的 RSS：
-
-```
-https://<domain>/rss/search?q=<keyword>
-```
-
-示例：
-- `https://www.mydealz.de/rss/search?q=anker`
-- `https://www.hotukdeals.com/rss/search?q=robot+lawn+mower`
-- `https://www.dealabs.com/rss/search?q=navimow`
-
-当用户指定品牌关键词时，对 Pepper 站点优先使用搜索 RSS，命中率远高于全站 RSS 过滤。
-
-## 互动数据获取策略
-
-| 数据类型 | RSS 是否包含 | 获取方式 |
-|---------|------------|---------|
-| 帖子标题 | 是 | RSS `<title>` |
-| 发布时间 | 是 | RSS `<pubDate>` |
-| 帖子链接 | 是 | RSS `<link>` |
-| 内容摘要 | 是 | RSS `<description>` |
-| 评论数 | 部分(Pepper/Reddit) | RSS `<slash:comments>` 或页面抓取 |
-| 点赞/投票 | 部分(Pepper/Reddit) | 页面抓取 |
-| 热度/温度 | 部分(Pepper) | 页面抓取 |
-| 分享数 | 否 | 页面抓取 |
-
-**策略**：RSS 负责批量发现匹配帖子 → 对匹配帖子用浏览器访问原帖提取完整互动数据。
+> 注：RSS URL 中的 `KEYWORD` 需替换为实际关键词，用 `+` 连接多词（如 `robot+lawn+mower`）。

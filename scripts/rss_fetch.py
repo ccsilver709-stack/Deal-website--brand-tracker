@@ -1,549 +1,667 @@
 #!/usr/bin/env python3
 """
-Deal 站品牌关键词监测脚本 v4
+Deal Site RSS Batch Fetcher
 
-核心改进：
-- 并发抓取（ThreadPoolExecutor，10 线程），61 站从 12 分钟降到 1-2 分钟
-- Pepper 站优先用搜索 RSS（/rss/search?q=keyword），命中率远高于全站过滤
-- Cloudflare 站直接走 rss2json 代理，不先试直连（节省时间）
-- 自动提取 slash:comments 评论数
-- 输出 needs_browser 标记，指导 AI 助手补全温度/投票
+Scans 60+ deal sites across 11+ countries via RSS/Atom feeds.
+Pure Python standard library — no required dependencies.
 
-用法:
-    python rss_fetch.py -k anker
-    python rss_fetch.py -k mammotion -k navimow -c de,uk,fr
-    python rss_fetch.py -k anker --search-fallback
+Usage:
+  python rss_fetch.py -k "navimow"
+  python rss_fetch.py -k anker -k soundcore -c us,de,uk --search-fallback
+  python rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
+  python rss_fetch.py -k anker --output csv --workers 20
+  python rss_fetch.py -k "robot lawn mower" --timeout 8
 """
 
 import argparse
+import csv
+import io
 import json
+import os
 import re
+import ssl
 import sys
+import time
+import urllib.parse
 import urllib.request
-import urllib.error
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
-from html import unescape
-from urllib.parse import quote_plus
+from datetime import datetime, timedelta
 
-# ============================================================
-# 站点配置
-# pepper=True: 支持 /rss/search?q=keyword 搜索 RSS
-# proxy=True: 有 Cloudflare，直连 403，直接走 rss2json 代理
-# ============================================================
-SITES = [
-    # 美国 (24)
-    {"domain": "dealnews.com", "country": "us", "name": "DealNews", "rss_url": "https://www.dealnews.com/?rss=1", "pepper": False, "proxy": False},
-    {"domain": "slickdeals.net", "country": "us", "name": "Slickdeals", "rss_url": "https://slickdeals.net/rss/", "pepper": True, "proxy": True},
-    {"domain": "dealseek.com", "country": "us", "name": "DealSeek", "rss_url": "https://www.dealseek.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "techbargains.com", "country": "us", "name": "TechBargains", "rss_url": "https://www.techbargains.com/rss.xml", "pepper": False, "proxy": False},
-    {"domain": "myvipon.com", "country": "us", "name": "MyVipon", "rss_url": "https://www.myvipon.com/feed/", "pepper": False, "proxy": True},
-    {"domain": "koupon.ai", "country": "us", "name": "Koupon.ai", "rss_url": "https://koupon.ai/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealsofamerica.com", "country": "us", "name": "Deals of America", "rss_url": "https://www.dealsofamerica.com/arss.xml", "pepper": False, "proxy": False},
-    {"domain": "bensbargains.com", "country": "us", "name": "BensBargains", "rss_url": "https://bensbargains.com/feed/", "pepper": False, "proxy": True},
-    {"domain": "freestufffinder.com", "country": "us", "name": "Free Stuff Finder", "rss_url": "https://freestufffinder.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "edealinfo.com", "country": "us", "name": "eDealInfo", "rss_url": "https://www.edealinfo.com/rss.xml", "pepper": False, "proxy": True},
-    {"domain": "1sale.com", "country": "us", "name": "1Sale", "rss_url": "https://1sale.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealwiki.com", "country": "us", "name": "DealWiki", "rss_url": "https://dealwiki.com/feed/", "pepper": False, "proxy": True},
-    {"domain": "21usdeal.com", "country": "us", "name": "21usDeal", "rss_url": "https://21usdeal.com/en/feed/", "pepper": False, "proxy": False},
-    {"domain": "ihotoffers.com", "country": "us", "name": "iHotOffers", "rss_url": "https://www.ihotoffers.com/feed/", "pepper": False, "proxy": True},
-    {"domain": "swaggrabber.com", "country": "us", "name": "SwagGrabber", "rss_url": "https://swaggrabber.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "shopsale.com", "country": "us", "name": "ShopSale", "rss_url": "https://www.shopsale.com/rss.php", "pepper": False, "proxy": True},
-    {"domain": "fabulesslyfrugal.com", "country": "us", "name": "Fabulessly Frugal", "rss_url": "https://fabulesslyfrugal.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "dansdeals.com", "country": "us", "name": "DansDeals", "rss_url": "https://www.dansdeals.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "reddit.com", "country": "us", "name": "Reddit r/deals", "rss_url": "https://www.reddit.com/r/deals/.rss", "pepper": False, "proxy": False},
-    {"domain": "struggleville.net", "country": "us", "name": "Struggleville", "rss_url": "https://www.struggleville.net/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealam.com", "country": "us", "name": "DealAM", "rss_url": "https://www.dealam.com/rss.xml", "pepper": False, "proxy": False},
-    {"domain": "simplexdeals.com", "country": "us", "name": "SimplexDeals", "rss_url": "https://simplexdeals.com/feed/", "pepper": False, "proxy": True},
-    {"domain": "moneysavingmom.com", "country": "us", "name": "Money Saving Mom", "rss_url": "https://www.moneysavingmom.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "hip2save.com", "country": "us", "name": "Hip2Save", "rss_url": "https://hip2save.com/feed/", "pepper": False, "proxy": False},
-    # 加拿大 (2)
-    {"domain": "savealoonie.com", "country": "ca", "name": "SaveaLoonie", "rss_url": "https://www.savealoonie.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "redflagdeals.com", "country": "ca", "name": "RedFlagDeals", "rss_url": "https://forums.redflagdeals.com/rss/", "pepper": True, "proxy": True},
-    # 德国 (10)
-    {"domain": "dealgott.de", "country": "de", "name": "Dealgott", "rss_url": "https://www.dealgott.de/feed/", "pepper": False, "proxy": False},
-    {"domain": "mein-deal.com", "country": "de", "name": "Mein-Deal", "rss_url": "https://www.mein-deal.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealbunny.de", "country": "de", "name": "DealBunny", "rss_url": "https://www.dealbunny.de/feed/", "pepper": False, "proxy": False},
-    {"domain": "snipz.de", "country": "de", "name": "Snipz", "rss_url": "https://snipz.de/feed/", "pepper": False, "proxy": False},
-    {"domain": "monsterdealz.de", "country": "de", "name": "MonsterDealz", "rss_url": "https://www.monsterdealz.de/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealdoktor.de", "country": "de", "name": "DealDoktor", "rss_url": "https://www.dealdoktor.de/feed/", "pepper": False, "proxy": False},
-    {"domain": "mydealz.de", "country": "de", "name": "MyDealz", "rss_url": "https://www.mydealz.de/rss/", "pepper": True, "proxy": True},
-    {"domain": "mytopdeals.net", "country": "de", "name": "MyTopDeals", "rss_url": "https://www.mytopdeals.net/feed/", "pepper": False, "proxy": False},
-    {"domain": "sparbote.de", "country": "de", "name": "Sparbote", "rss_url": "https://www.sparbote.de/feed/", "pepper": False, "proxy": False},
-    {"domain": "dealonkel.de", "country": "de", "name": "Dealonkel", "rss_url": "https://www.dealonkel.de/rss.xml", "pepper": False, "proxy": False},
-    # 英国 (2)
-    {"domain": "hotukdeals.com", "country": "uk", "name": "HotUKDeals", "rss_url": "https://www.hotukdeals.com/rss/", "pepper": True, "proxy": True},
-    {"domain": "latestdeals.co.uk", "country": "uk", "name": "LatestDeals", "rss_url": "https://www.latestdeals.co.uk/feeds/rss", "pepper": False, "proxy": False},
-    # 法国 (3)
-    {"domain": "dealabs.com", "country": "fr", "name": "Dealabs", "rss_url": "https://www.dealabs.com/rss/", "pepper": True, "proxy": True},
-    {"domain": "serialdealer.fr", "country": "fr", "name": "SerialDealer", "rss_url": "https://www.serialdealer.fr/feed/", "pepper": False, "proxy": False},
-    {"domain": "bons-plans-malins.com", "country": "fr", "name": "Bons Plans Malins", "rss_url": "https://www.bons-plans-malins.com/feed/", "pepper": False, "proxy": False},
-    # 意大利 (5)
-    {"domain": "scontify.net", "country": "it", "name": "Scontify", "rss_url": "https://www.scontify.net/feed/", "pepper": False, "proxy": True},
-    {"domain": "bestdiscount.it", "country": "it", "name": "BestDiscount", "rss_url": "https://www.bestdiscount.it/feed/", "pepper": False, "proxy": False},
-    {"domain": "wikideal.it", "country": "it", "name": "WikiDeal", "rss_url": "https://www.wikideal.it/feed/", "pepper": False, "proxy": False},
-    {"domain": "hotshops.it", "country": "it", "name": "HotShops IT", "rss_url": "https://www.hotshops.it/feed/", "pepper": False, "proxy": False},
-    {"domain": "tuttotek.it", "country": "it", "name": "TuttoTek", "rss_url": "https://www.tuttotek.it/feed/", "pepper": False, "proxy": False},
-    # 西班牙 (8)
-    {"domain": "chollometro.com", "country": "es", "name": "Chollometro", "rss_url": "https://www.chollometro.com/rss/", "pepper": True, "proxy": True},
-    {"domain": "super-chollos.com", "country": "es", "name": "SuperChollos", "rss_url": "https://www.super-chollos.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "cholloterapia.com", "country": "es", "name": "Cholloterapia", "rss_url": "https://www.cholloterapia.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "soydechollos.com", "country": "es", "name": "SoydeChollos", "rss_url": "https://www.soydechollos.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "michollo.com", "country": "es", "name": "MiChollo", "rss_url": "https://www.michollo.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "cholloschina.com", "country": "es", "name": "ChollosChina", "rss_url": "https://www.cholloschina.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "mepicaelchollo.com", "country": "es", "name": "MePicaElChollo", "rss_url": "https://www.mepicaelchollo.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "nolodejesescapar.com", "country": "es", "name": "NoLoDejesEscapar", "rss_url": "https://www.nolodejesescapar.com/feed/", "pepper": False, "proxy": False},
-    # 墨西哥 (2)
-    {"domain": "promodescuentos.com", "country": "mx", "name": "Promodescuentos", "rss_url": "https://www.promodescuentos.com/rss/", "pepper": True, "proxy": True},
-    {"domain": "megadescuentos.com", "country": "mx", "name": "Megadescuentos", "rss_url": "https://www.megadescuentos.com/feed/", "pepper": False, "proxy": False},
-    # 波兰 (2)
-    {"domain": "pepper.pl", "country": "pl", "name": "Pepper.pl", "rss_url": "https://www.pepper.pl/rss/", "pepper": True, "proxy": True},
-    {"domain": "hotshops.pl", "country": "pl", "name": "HotShops PL", "rss_url": "https://www.hotshops.pl/feed/", "pepper": False, "proxy": True},
-    # 巴西 (3)
-    {"domain": "gatry.com", "country": "br", "name": "Gatry", "rss_url": "https://www.gatry.com/feed/", "pepper": False, "proxy": False},
-    {"domain": "promobit.com.br", "country": "br", "name": "Promobit", "rss_url": "https://www.promobit.com.br/rss/", "pepper": True, "proxy": True},
-    {"domain": "pelando.com.br", "country": "br", "name": "Pelando", "rss_url": "https://www.pelando.com.br/rss/", "pepper": True, "proxy": True},
-    # 澳大利亚 (1)
-    {"domain": "ozbargain.com.au", "country": "au", "name": "OzBargain", "rss_url": "https://www.ozbargain.com.au/rss.xml", "pepper": False, "proxy": False},
+# ═══════════════════════════════════════════════════════════════════════
+#  Deal Sites Configuration (60+ sites, 11+ countries)
+# ═══════════════════════════════════════════════════════════════════════
+
+DEAL_SITES = [
+    # ── Pepper Network (Cloudflare protected, but some allow RSS) ──
+    {"country": "us", "site": "Slickdeals", "domain": "slickdeals.net",
+     "rss_url": "https://slickdeals.net/rss/search?q={q}",
+     "search_url": "https://slickdeals.net/search?q={q}",
+     "pepper": True},
+    {"country": "de", "site": "MyDealz", "domain": "mydealz.de",
+     "rss_url": "https://www.mydealz.de/rss/search?q={q}",
+     "search_url": "https://www.mydealz.de/search?q={q}",
+     "pepper": True},
+    {"country": "uk", "site": "HotUKDeals", "domain": "hotukdeals.com",
+     "rss_url": "https://www.hotukdeals.com/rss/search?q={q}",
+     "search_url": "https://www.hotukdeals.com/search?q={q}",
+     "pepper": True},
+    {"country": "fr", "site": "Dealabs", "domain": "dealabs.com",
+     "rss_url": "https://www.dealabs.com/rss/search?q={q}",
+     "search_url": "https://www.dealabs.com/search?q={q}",
+     "pepper": True},
+    {"country": "es", "site": "Chollometro", "domain": "chollometro.com",
+     "rss_url": "https://www.chollometro.com/rss/search?q={q}",
+     "search_url": "https://www.chollometro.com/search?q={q}",
+     "pepper": True},
+    {"country": "mx", "site": "Promodescuentos", "domain": "promodescuentos.com",
+     "rss_url": "https://www.promodescuentos.com/rss/search?q={q}",
+     "search_url": "https://www.promodescuentos.com/search?q={q}",
+     "pepper": True},
+    {"country": "pl", "site": "Pepper.pl", "domain": "pepper.pl",
+     "rss_url": "https://www.pepper.pl/rss/search?q={q}",
+     "search_url": "https://www.pepper.pl/search?q={q}",
+     "pepper": True},
+    {"country": "br", "site": "Pelando", "domain": "pelando.com.br",
+     "rss_url": "https://www.pelando.com.br/rss/search?q={q}",
+     "search_url": "https://www.pelando.com.br/search?q={q}",
+     "pepper": True},
+    {"country": "br", "site": "Promobit", "domain": "promobit.com.br",
+     "rss_url": "https://www.promobit.com.br/rss/search?q={q}",
+     "search_url": "https://www.promobit.com.br/search?q={q}",
+     "pepper": True},
+    {"country": "ca", "site": "RedFlagDeals", "domain": "redflagdeals.com",
+     "rss_url": "https://forums.redflagdeals.com/rss/",
+     "search_url": "https://forums.redflagdeals.com/search/?q={q}",
+     "pepper": True},
+    {"country": "au", "site": "OzBargain", "domain": "ozbargain.com.au",
+     "rss_url": "https://www.ozbargain.com.au/rss.xml",
+     "search_url": "https://www.ozbargain.com.au/search?q={q}",
+     "pepper": True},
+
+    # ── US Non-Pepper ──
+    {"country": "us", "site": "DealNews", "domain": "dealnews.com",
+     "rss_url": "https://www.dealnews.com/rss.xml",
+     "search_url": "https://www.dealnews.com/search/{q}.html", "pepper": False},
+    {"country": "us", "site": "Reddit r/deals", "domain": "reddit.com",
+     "rss_url": "https://www.reddit.com/r/deals/.rss",
+     "search_url": "https://www.reddit.com/r/deals/search/?q={q}", "pepper": False},
+    {"country": "us", "site": "Hip2Save", "domain": "hip2save.com",
+     "rss_url": "https://hip2save.com/feed/",
+     "search_url": "https://hip2save.com/?s={q}", "pepper": False},
+    {"country": "us", "site": "DansDeals", "domain": "dansdeals.com",
+     "rss_url": "https://www.dansdeals.com/feed/",
+     "search_url": "https://www.dansdeals.com/?s={q}", "pepper": False},
+    {"country": "us", "site": "TechBargains", "domain": "techbargains.com",
+     "rss_url": "https://www.techbargains.com/rss.xml",
+     "search_url": "https://www.techbargains.com/search?q={q}", "pepper": False},
+    {"country": "us", "site": "BensBargains", "domain": "bensbargains.com",
+     "rss_url": "https://bensbargains.com/feed/",
+     "search_url": "https://bensbargains.com/?s={q}", "pepper": False},
+    {"country": "us", "site": "DealsPlus", "domain": "dealsplus.com",
+     "rss_url": "https://www.dealsplus.com/rss",
+     "search_url": "https://www.dealsplus.com/search?q={q}", "pepper": False},
+    {"country": "us", "site": "DealCatcher", "domain": "dealcatcher.com",
+     "rss_url": "https://www.dealcatcher.com/rss",
+     "search_url": "https://www.dealcatcher.com/search?q={q}", "pepper": False},
+    {"country": "us", "site": "Dealighted", "domain": "dealighted.com",
+     "rss_url": "https://www.dealighted.com/rss/popular",
+     "search_url": "https://www.dealighted.com/search?q={q}", "pepper": False},
+    {"country": "us", "site": "BradsDeals", "domain": "bradsdeals.com",
+     "rss_url": "https://www.bradsdeals.com/rss",
+     "search_url": "https://www.bradsdeals.com/search?q={q}", "pepper": False},
+    {"country": "us", "site": "1Sale", "domain": "1sale.com",
+     "rss_url": "https://www.1sale.com/feed/",
+     "search_url": "https://www.1sale.com/?s={q}", "pepper": False},
+    {"country": "us", "site": "Reddit r/buildapcsales", "domain": "reddit.com",
+     "rss_url": "https://www.reddit.com/r/buildapcsales/.rss",
+     "search_url": "https://www.reddit.com/r/buildapcsales/search/?q={q}", "pepper": False},
+    {"country": "us", "site": "Reddit r/GameDeals", "domain": "reddit.com",
+     "rss_url": "https://www.reddit.com/r/GameDeals/.rss",
+     "search_url": "https://www.reddit.com/r/GameDeals/search/?q={q}", "pepper": False},
+    {"country": "us", "site": "DealMoon", "domain": "dealmoon.com",
+     "rss_url": "https://dealmoon.com/rss",
+     "search_url": "https://dealmoon.com/search?q={q}", "pepper": False},
+
+    # ── Canada ──
+    {"country": "ca", "site": "SaveaLoonie", "domain": "savealoonie.com",
+     "rss_url": "https://www.savealoonie.com/feed/",
+     "search_url": "https://www.savealoonie.com/?s={q}", "pepper": False},
+    {"country": "ca", "site": "SmartCanucks", "domain": "smartcanucks.ca",
+     "rss_url": "https://www.smartcanucks.ca/feed/",
+     "search_url": "https://www.smartcanucks.ca/?s={q}", "pepper": False},
+
+    # ── Germany ──
+    {"country": "de", "site": "Mein-Deal", "domain": "mein-deal.com",
+     "rss_url": "https://www.mein-deal.com/feed/",
+     "search_url": "https://www.mein-deal.com/?s={q}", "pepper": False},
+    {"country": "de", "site": "Dealgott", "domain": "dealgott.de",
+     "rss_url": "https://www.dealgott.de/feed/",
+     "search_url": "https://www.dealgott.de/?s={q}", "pepper": False},
+    {"country": "de", "site": "DealDoktor", "domain": "dealdoktor.de",
+     "rss_url": "https://www.dealdoktor.de/feed/",
+     "search_url": "https://www.dealdoktor.de/?s={q}", "pepper": False},
+    {"country": "de", "site": "Sparwelt", "domain": "sparwelt.de",
+     "rss_url": "https://www.sparwelt.de/rss/feed",
+     "search_url": "https://www.sparwelt.de/search?q={q}", "pepper": False},
+
+    # ── UK ──
+    {"country": "uk", "site": "LatestDeals", "domain": "latestdeals.co.uk",
+     "rss_url": "https://www.latestdeals.co.uk/feeds/rss",
+     "search_url": "https://www.latestdeals.co.uk/deals?q={q}", "pepper": False},
+    {"country": "uk", "site": "DealSpy", "domain": "dealspy.co.uk",
+     "rss_url": "https://dealspy.co.uk/feed/",
+     "search_url": "https://dealspy.co.uk/?s={q}", "pepper": False},
+
+    # ── France ──
+    {"country": "fr", "site": "SerialDealer", "domain": "serialdealer.fr",
+     "rss_url": "https://www.serialdealer.fr/feed/",
+     "search_url": "https://www.serialdealer.fr/?s={q}", "pepper": False},
+    {"country": "fr", "site": "Bons-Plans-Geeks", "domain": "bons-plans-geeks.com",
+     "rss_url": "https://www.bons-plans-geeks.com/feed/",
+     "search_url": "https://www.bons-plans-geeks.com/?s={q}", "pepper": False},
+
+    # ── Italy ──
+    {"country": "it", "site": "Scontify", "domain": "scontify.com",
+     "rss_url": "https://www.scontify.com/feed/",
+     "search_url": "https://www.scontify.com/?s={q}", "pepper": False},
+    {"country": "it", "site": "WikiDeal", "domain": "wikideal.it",
+     "rss_url": "https://www.wikideal.it/feed/",
+     "search_url": "https://www.wikideal.it/?s={q}", "pepper": False},
+
+    # ── Spain ──
+    {"country": "es", "site": "SuperChollos", "domain": "superchollos.com",
+     "rss_url": "https://www.superchollos.com/feed/",
+     "search_url": "https://www.superchollos.com/?s={q}", "pepper": False},
+
+    # ── Mexico ──
+    {"country": "mx", "site": "Megadescuentos", "domain": "megadescuentos.com",
+     "rss_url": "https://www.megadescuentos.com/feed/",
+     "search_url": "https://www.megadescuentos.com/?s={q}", "pepper": False},
+
+    # ── Brazil ──
+    {"country": "br", "site": "Gatry", "domain": "gatry.com",
+     "rss_url": "https://www.gatry.com/feed/",
+     "search_url": "https://www.gatry.com/search?q={q}", "pepper": False},
+
+    # ── India ──
+    {"country": "in", "site": "FreeKaaMaal", "domain": "freekaamaal.com",
+     "rss_url": "https://www.freekaamaal.com/feed/",
+     "search_url": "https://www.freekaamaal.com/?s={q}", "pepper": False},
+    {"country": "in", "site": "IndiaBargains", "domain": "indiabargains.com",
+     "rss_url": "https://www.indiabargains.com/feed/",
+     "search_url": "https://www.indiabargains.com/?s={q}", "pepper": False},
+
+    # ── Netherlands ──
+    {"country": "nl", "site": "Kortingscode", "domain": "kortingscode.nl",
+     "rss_url": "https://www.kortingscode.nl/feed/",
+     "search_url": "https://www.kortingscode.nl/?s={q}", "pepper": False},
 ]
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-HEADERS = {
-    "User-Agent": UA,
-    "Accept": "application/rss+xml, application/xml, text/xml, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 
-# 常见 RSS 路径回退
-RSS_FALLBACK_PATHS = ["/feed/", "/rss/", "/rss.xml", "/feed.xml", "/?feed=rss2", "/feeds/posts/default"]
+# SSL context that doesn't verify (some deal sites have cert issues)
+SSL_CTX = ssl.create_default_context()
+SSL_CTX.check_hostname = False
+SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
-def fetch_url(url, timeout=10):
-    """请求 URL，返回 bytes 或 None"""
+# ═══════════════════════════════════════════════════════════════════════
+#  HTTP Fetching (urllib only — fast, no multi-backend fallback)
+# ═══════════════════════════════════════════════════════════════════════
+
+def fetch_url(url, timeout=8, extra_headers=None):
+    """
+    Fetch URL content using urllib only.
+    Single attempt, no retry, no multi-backend fallback.
+    Returns (content_str, backend_name) or (None, error_msg).
+    """
     try:
-        req = urllib.request.Request(url, headers=HEADERS)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read()
-    except Exception:
-        return None
-
-
-def fetch_via_proxy(rss_url, timeout=15):
-    """通过 rss2json 代理抓取，返回 JSON dict 或 None"""
-    proxy_url = f"https://api.rss2json.com/v1/api.json?rss_url={quote_plus(rss_url)}"
-    try:
-        req = urllib.request.Request(proxy_url, headers=HEADERS)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read())
-            if data.get("status") == "ok" and data.get("items"):
-                return data
-    except Exception:
-        pass
-    return None
-
-
-def get_pepper_search_url(site, keyword):
-    """生成 Pepper 站搜索 RSS URL"""
-    domain = site["domain"]
-    if domain == "redflagdeals.com":
-        return f"https://forums.redflagdeals.com/rss/?q={quote_plus(keyword)}"
-    return f"https://www.{domain}/rss/search?q={quote_plus(keyword)}"
-
-
-def parse_rss_xml(xml_bytes, site, keyword_lower_list):
-    """解析 XML 格式 RSS，返回匹配帖子列表"""
-    results = []
-    try:
-        root = ET.fromstring(xml_bytes)
-    except Exception:
-        return results
-
-    items = root.findall(".//item")
-    if not items:
-        # Atom 格式
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
-        items = root.findall(".//atom:entry", ns)
-
-    for item in items:
-        title = ""
-        link = ""
-        pub_date = ""
-        summary = ""
-
-        for child in item:
-            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-            if tag == "title":
-                title = unescape((child.text or "").strip())
-            elif tag == "link":
-                link = (child.text or child.get("href", "")).strip()
-            elif tag in ("pubDate", "published", "updated"):
-                pub_date = (child.text or "").strip()
-            elif tag in ("description", "summary", "content"):
-                summary = unescape(re.sub(r"<[^>]+>", "", child.text or ""))
-
-        # 评论数和评论链接
-        comments_count = ""
-        comments_link = ""
-        for child in item:
-            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-            if tag == "comments" and child.text:
-                t = child.text.strip()
-                if t.isdigit():
-                    comments_count = t
-                else:
-                    comments_link = t
-            elif tag == "commentRss" and child.text:
-                comments_link = child.text.strip()
-
-        text_blob = (title + " " + summary).lower()
-        matched = [kw for kw in keyword_lower_list if kw in text_blob]
-        if matched:
-            results.append({
-                "site": site["name"], "domain": site["domain"],
-                "country": site["country"].upper(), "title": title,
-                "link": link, "pub_date": pub_date,
-                "summary": summary[:500],
-                "comments_count": comments_count,
-                "comments_link": comments_link,
-                "temperature": "",
-                "votes": "",
-                "needs_browser": site.get("pepper", False) or site.get("proxy", False),
-                "matched_keywords": matched,
-            })
-    return results
-
-
-def parse_rss_json(json_data, site, keyword_lower_list):
-    """解析 rss2json 返回的 JSON"""
-    results = []
-    for item in json_data.get("items", []):
-        title = item.get("title", "")
-        link = item.get("link", "")
-        pub_date = item.get("pubDate", "")
-        summary = re.sub(r"<[^>]+>", "", item.get("description", ""))
-        text_blob = (title + " " + summary).lower()
-        matched = [kw for kw in keyword_lower_list if kw in text_blob]
-        if matched:
-            results.append({
-                "site": site["name"], "domain": site["domain"],
-                "country": site["country"].upper(), "title": title,
-                "link": link, "pub_date": pub_date,
-                "summary": summary[:500],
-                "comments_count": str(item.get("comments", "")),
-                "comments_link": "",
-                "temperature": "",
-                "votes": "",
-                "needs_browser": site.get("pepper", False) or site.get("proxy", False),
-                "matched_keywords": matched,
-            })
-    return results
-
-
-def scrape_site(site, keywords, keyword_lower_list, timeout=10):
-    """抓取单个站点，返回 (site, success, posts, error)"""
-    # Pepper 站优先用搜索 RSS（命中率高）
-    if site.get("pepper"):
-        for kw in keywords:
-            search_url = get_pepper_search_url(site, kw)
-            if site.get("proxy"):
-                data = fetch_via_proxy(search_url, timeout)
-                if data:
-                    posts = parse_rss_json(data, site, keyword_lower_list)
-                    if posts:
-                        return site, True, posts, None
-            else:
-                raw = fetch_url(search_url, timeout)
-                if raw:
-                    posts = parse_rss_xml(raw, site, keyword_lower_list)
-                    if posts:
-                        return site, True, posts, None
-
-    # 全站 RSS
-    rss_url = site["rss_url"]
-    if site.get("proxy"):
-        # Cloudflare 站直接走代理
-        data = fetch_via_proxy(rss_url, timeout + 5)
-        if data:
-            posts = parse_rss_json(data, site, keyword_lower_list)
-            return site, True, posts, None
-        return site, False, [], "proxy_failed"
-
-    # 普通站直连
-    raw = fetch_url(rss_url, timeout)
-    if raw and (b"<rss" in raw[:200] or b"<feed" in raw[:200] or b"<?xml" in raw[:200]):
-        posts = parse_rss_xml(raw, site, keyword_lower_list)
-        return site, True, posts, None
-
-    # 回退探测常见 RSS 路径
-    for path in RSS_FALLBACK_PATHS:
-        fallback_url = f"https://www.{site['domain']}{path}"
-        raw = fetch_url(fallback_url, timeout)
-        if raw and (b"<rss" in raw[:200] or b"<feed" in raw[:200] or b"<?xml" in raw[:200]):
-            posts = parse_rss_xml(raw, site, keyword_lower_list)
-            return site, True, posts, None
-
-    return site, False, [], "no_rss"
-
-
-def search_google_news(site, keywords, timeout=15):
-    """Google News RSS 搜索回退，只匹配标题减少噪音"""
-    query = quote_plus(f"site:{site['domain']} {' '.join(keywords)}")
-    url = f"https://news.google.com/rss/search?q={query}&hl=en"
-    raw = fetch_url(url, timeout)
-    if not raw:
-        return []
-    results = []
-    try:
-        root = ET.fromstring(raw)
-        for item in root.findall(".//item"):
-            title = unescape((item.findtext("title") or "").strip())
-            # 只在标题中匹配关键词，减少 Google News 回退噪音
-            title_lower = title.lower()
-            matched = [kw for kw in keywords if kw.lower() in title_lower]
-            if not matched:
-                continue
-            link = (item.findtext("link") or "").strip()
-            pub_date = (item.findtext("pubDate") or "").strip()
-            summary = re.sub(r"<[^>]+>", "", item.findtext("description") or "")
-            results.append({
-                "site": site["name"], "domain": site["domain"],
-                "country": site["country"].upper(), "title": title,
-                "link": link, "pub_date": pub_date,
-                "summary": summary[:500],
-                "comments_count": "", "comments_link": "",
-                "temperature": "", "votes": "",
-                "needs_browser": True,
-                "matched_keywords": matched,
-                "source": "google_news_fallback",
-            })
-    except Exception:
-        pass
-    return results
-
-
-def search_by_date_range(site, keywords, date_from, date_to, timeout=15):
-    """搜索引擎时间范围回退：Bing 普通搜索优先（收录全），Google News 备选"""
-    results = []
-    query_kw = " ".join(keywords)
-
-    def is_likely_deal_post(title):
-        """过滤明显非 deal 的讨论帖（Reddit 问答、吐槽等）"""
-        t = title.lower()
-        non_deal_patterns = ["what is your response", "unbearable", "subreddit", "ama ",
-                             "how's the", "review", "vs the", "got tired", "ugliest spot",
-                             "agronomy", "should i return", "you killed"]
-        return not any(p in t for p in non_deal_patterns)
-
-    # 引擎1: Bing 普通搜索 RSS（收录最全，优先）
-    try:
-        q = quote_plus(f"site:{site['domain']} {query_kw}")
-        url = f"https://www.bing.com/search?q={q}&format=rss"
-        raw = fetch_url(url, timeout)
-        if raw:
-            root = ET.fromstring(raw)
-            ns = {"atom": "http://www.w3.org/2005/Atom"}
-            for item in root.findall(".//atom:entry", ns):
-                title = unescape((item.findtext("atom:title", default="", namespaces=ns) or "").strip())
-                if not any(kw.lower() in title.lower() for kw in keywords):
-                    continue
-                if not is_likely_deal_post(title):
-                    continue
-                link_elem = item.find("atom:link", ns)
-                link = link_elem.get("href", "") if link_elem is not None else ""
-                pub_date = (item.findtext("atom:pubDate", default="", namespaces=ns) or
-                            item.findtext("atom:updated", default="", namespaces=ns) or "").strip()
-                summary = re.sub(r"<[^>]+>", "", item.findtext("atom:summary", default="", namespaces=ns) or "")
-                results.append({
-                    "site": site["name"], "domain": site["domain"],
-                    "country": site["country"].upper(), "title": title,
-                    "link": link, "pub_date": pub_date,
-                    "summary": summary[:500],
-                    "comments_count": "", "comments_link": "",
-                    "temperature": "", "votes": "",
-                    "needs_browser": True,
-                    "matched_keywords": [kw for kw in keywords if kw.lower() in title.lower()],
-                    "source": "date_search_bing",
-                })
-    except Exception:
-        pass
-
-    # 引擎2: Google News RSS（Bing 没结果时备选）
-    if not results:
-        try:
-            q = quote_plus(f"site:{site['domain']} {query_kw} after:{date_from} before:{date_to}")
-            url = f"https://news.google.com/rss/search?q={q}&hl=en"
-            raw = fetch_url(url, timeout)
-            if raw:
-                root = ET.fromstring(raw)
-                for item in root.findall(".//item"):
-                    title = unescape((item.findtext("title") or "").strip())
-                    if not any(kw.lower() in title.lower() for kw in keywords):
-                        continue
-                    if not is_likely_deal_post(title):
-                        continue
-                    link = (item.findtext("link") or "").strip()
-                    pub_date = (item.findtext("pubDate") or "").strip()
-                    summary = re.sub(r"<[^>]+>", "", item.findtext("description") or "")
-                    results.append({
-                        "site": site["name"], "domain": site["domain"],
-                        "country": site["country"].upper(), "title": title,
-                        "link": link, "pub_date": pub_date,
-                        "summary": summary[:500],
-                        "comments_count": "", "comments_link": "",
-                        "temperature": "", "votes": "",
-                        "needs_browser": True,
-                        "matched_keywords": [kw for kw in keywords if kw.lower() in title.lower()],
-                        "source": "date_search_google",
-                    })
-        except Exception:
-            pass
-
-    return results
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Deal 站品牌关键词监测 v4（并发抓取）")
-    parser.add_argument("-k", "--keyword", action="append", required=True, help="品牌关键词，可多次传入")
-    parser.add_argument("-c", "--countries", default="", help="国家代码过滤，逗号分隔，不传扫全部")
-    parser.add_argument("--timeout", type=int, default=10, help="单站请求超时秒数，默认 10")
-    parser.add_argument("--output", choices=["json", "csv"], default="json", help="输出格式")
-    parser.add_argument("--search-fallback", action="store_true", help="失败站点用 Google News 搜索回退")
-    parser.add_argument("--workers", type=int, default=10, help="并发线程数，默认 10")
-    parser.add_argument("--date-from", default="", help="起始日期 YYYY-MM-DD，限定搜索时间范围")
-    parser.add_argument("--date-to", default="", help="结束日期 YYYY-MM-DD，限定搜索时间范围")
-    args = parser.parse_args()
-
-    keywords = args.keyword
-    keyword_lower_list = [kw.lower() for kw in keywords]
-
-    # 过滤国家
-    sites = SITES
-    if args.countries:
-        country_set = set(c.strip().lower() for c in args.countries.split(","))
-        sites = [s for s in SITES if s["country"] in country_set]
-
-    print(f"扫描 {len(sites)} 个站点，关键词: {keywords}，并发: {args.workers}", file=sys.stderr)
-
-    all_posts = []
-    success_count = 0
-    failed_sites = []
-
-    # 并发抓取
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = {
-            executor.submit(scrape_site, site, keywords, keyword_lower_list, args.timeout): site
-            for site in sites
+        headers = {
+            "User-Agent": UA,
+            "Accept": "application/rss+xml, application/xml, text/xml, text/html, */*",
+            "Accept-Language": "en-US,en;q=0.9",
         }
-        for future in as_completed(futures):
-            site = futures[future]
-            try:
-                _, success, posts, error = future.result()
-                if success:
-                    success_count += 1
-                    all_posts.extend(posts)
-                    if posts:
-                        print(f"  [OK] {site['name']}: {len(posts)} 条匹配", file=sys.stderr)
-                else:
-                    failed_sites.append(site["domain"])
-                    print(f"  [FAIL] {site['name']}: {error}", file=sys.stderr)
-            except Exception as e:
-                failed_sites.append(site["domain"])
-                print(f"  [ERROR] {site['name']}: {e}", file=sys.stderr)
+        if extra_headers:
+            headers.update(extra_headers)
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL_CTX) as resp:
+            content = resp.read().decode("utf-8", errors="replace")
+        if content and "just a moment" not in content.lower():
+            return content, "urllib"
+        return None, "cloudflare_blocked"
+    except Exception as e:
+        return None, str(e)[:60]
 
-    # Google News 回退
-    if args.search_fallback and failed_sites:
-        print(f"\nGoogle News 回退 {len(failed_sites)} 个失败站点...", file=sys.stderr)
-        fallback_sites = [s for s in sites if s["domain"] in failed_sites]
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {
-                executor.submit(search_google_news, site, keywords, args.timeout + 5): site
-                for site in fallback_sites
-            }
-            for future in as_completed(futures):
-                site = futures[future]
-                try:
-                    posts = future.result()
-                    if posts:
-                        all_posts.extend(posts)
-                        failed_sites.remove(site["domain"])
-                        success_count += 1
-                        print(f"  [回退OK] {site['name']}: {len(posts)} 条", file=sys.stderr)
-                except Exception:
-                    pass
 
-    # 日期范围搜索回退（方案A）：指定 --date-from/--date-to 时，对无匹配站点用搜索引擎限定时间范围
-    if args.date_from and args.date_to:
-        # 找出 RSS 阶段无匹配的站点
-        matched_domains = {p["domain"] for p in all_posts}
-        date_search_sites = [s for s in sites if s["domain"] not in matched_domains]
-        if date_search_sites:
-            print(f"\n日期范围搜索 {args.date_from} ~ {args.date_to}，覆盖 {len(date_search_sites)} 个无匹配站点...", file=sys.stderr)
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {
-                    executor.submit(search_by_date_range, site, keywords, args.date_from, args.date_to, args.timeout + 5): site
-                    for site in date_search_sites
-                }
-                for future in as_completed(futures):
-                    site = futures[future]
-                    try:
-                        posts = future.result()
-                        if posts:
-                            all_posts.extend(posts)
-                            if site["domain"] in failed_sites:
-                                failed_sites.remove(site["domain"])
-                                success_count += 1
-                            print(f"  [日期搜索OK] {site['name']}: {len(posts)} 条", file=sys.stderr)
-                    except Exception:
-                        pass
+def fetch_google(url, timeout=10):
+    """Fetch Google with consent cookie — improves reliability."""
+    return fetch_url(url, timeout=timeout, extra_headers={
+        "Cookie": "CONSENT=YES+cb.en+cd+px; SOCS=CAISHAgCEhJnd3NfMjAyNjA4MTUtMFNSdWADaBwA",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Referer": "https://www.google.com/",
+    })
 
-    # 去重
-    seen = set()
-    unique = []
-    for p in all_posts:
-        if p["link"] not in seen:
-            seen.add(p["link"])
-            unique.append(p)
 
-    # 按时间倒序
-    def parse_date(s):
-        for fmt in ["%Y-%m-%d %H:%M:%S", "%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z"]:
-            try:
-                dt = datetime.strptime(s.strip(), fmt)
-                # 统一转为 naive datetime，避免 offset-aware vs naive 比较错误
-                if dt.tzinfo is not None:
-                    dt = dt.replace(tzinfo=None)
-                return dt
-            except Exception:
-                pass
-        return datetime.min
-    unique.sort(key=lambda x: parse_date(x["pub_date"]), reverse=True)
+# ═══════════════════════════════════════════════════════════════════════
+#  RSS/Atom Parsing
+# ═══════════════════════════════════════════════════════════════════════
 
-    # 输出
-    output = {
-        "query": {"keywords": keywords, "countries": args.countries or "all",
-                  "generated_at": datetime.now().isoformat(),
-                  "search_fallback": args.search_fallback},
-        "stats": {"total": len(sites), "success": success_count,
-                  "failed": len(failed_sites), "matches": len(unique)},
-        "failed_sites": failed_sites,
-        "total_matches": len(unique),
-        "posts": unique,
+def extract_price(text):
+    """Extract price from text using regex."""
+    if not text:
+        return ""
+    patterns = [
+        r'[\$£€¥₹]\s?(\d{1,}(?:[.,]\d{2})?)',
+        r'(\d{1,}(?:[.,]\d{2})?)\s?[\$£€¥₹]',
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.IGNORECASE)
+        if m:
+            return m.group(0).strip()
+    return ""
+
+
+def parse_rss(xml_text, site_info, keywords):
+    """
+    Parse RSS/Atom XML and filter by keywords.
+    Returns list of post dicts.
+    """
+    posts = []
+    if not xml_text:
+        return posts
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return posts
+
+    ns = {
+        "atom": "http://www.w3.org/2005/Atom",
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "slash": "http://purl.org/rss/1.0/modules/slash/",
+        "content": "http://purl.org/rss/1.0/modules/content/",
     }
 
+    # Try RSS items first, then Atom entries
+    items = root.findall(".//item")
+    is_atom = False
+    if not items:
+        items = root.findall(".//atom:entry", ns)
+        is_atom = True
+
+    for item in items:
+        try:
+            if is_atom:
+                title_el = item.find("atom:title", ns)
+                link_el = item.find("atom:link", ns)
+                summary_el = item.find("atom:summary", ns) or item.find("atom:content", ns)
+                date_el = item.find("atom:published", ns) or item.find("atom:updated", ns)
+            else:
+                title_el = item.find("title")
+                link_el = item.find("link")
+                summary_el = item.find("description")
+                date_el = item.find("pubDate") or item.find("{http://purl.org/dc/elements/1.1/}date")
+
+            title = title_el.text if title_el is not None and title_el.text else ""
+            link = ""
+            if link_el is not None:
+                if is_atom:
+                    link = link_el.get("href", "")
+                else:
+                    link = link_el.text if link_el.text else ""
+
+            summary = ""
+            if summary_el is not None and summary_el.text:
+                summary = summary_el.text
+            pub_date = date_el.text if date_el is not None and date_el.text else ""
+
+            # Keyword filtering (OR match — any keyword hits)
+            combined = (title + " " + summary).lower()
+            if not any(kw.lower() in combined for kw in keywords):
+                continue
+
+            # Extract comments count (WordPress slash module)
+            comments = ""
+            comments_el = item.find("{http://purl.org/rss/1.0/modules/slash/}comments")
+            if comments_el is not None and comments_el.text:
+                comments = comments_el.text
+
+            needs_browser = site_info.get("pepper", False)
+
+            posts.append({
+                "site": site_info["site"],
+                "domain": site_info["domain"],
+                "country": site_info["country"],
+                "title": title.strip(),
+                "link": link.strip(),
+                "pub_date": pub_date.strip(),
+                "summary": summary[:500] if summary else "",
+                "price": extract_price(title) or extract_price(summary),
+                "temperature": "",
+                "votes": "",
+                "comments_count": comments,
+                "needs_browser": needs_browser,
+            })
+        except Exception:
+            continue
+
+    return posts
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  HTML Search Fallback (direct site search, no search engine needed)
+# ═══════════════════════════════════════════════════════════════════════
+
+def _strip_noise_tags(html):
+    """Remove script, style, and noscript tags from HTML."""
+    html = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    html = re.sub(r'<noscript[^>]*>.*?</noscript>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    return html
+
+
+def _is_valid_title(title):
+    """Check if a title looks like real content, not JS code."""
+    if not title or len(title) < 5:
+        return False
+    js_indicators = ['addEventListener', 'function(', 'var ', '&&', '||', '===',
+                     'prototype', 'typeof', 'void(', '.af.', 'return ']
+    if any(ind in title for ind in js_indicators):
+        return False
+    alpha_count = sum(1 for c in title if c.isalpha())
+    if alpha_count < len(title) * 0.4:
+        return False
+    return True
+
+
+def search_site_direct(site_info, keywords, timeout=10):
+    """Fetch the site's own search page directly — no Google/Bing needed.
+    Extracts deal links from the site's HTML search results."""
+    if not site_info.get("search_url"):
+        return []
+
+    search_url = site_info["search_url"].format(
+        q=urllib.parse.quote(keywords[0]) if keywords else ""
+    )
+    content, backend = fetch_url(search_url, timeout=timeout)
+    if not content:
+        return []
+
+    content = _strip_noise_tags(content)
+    domain = site_info["domain"]
+    escaped = re.escape(domain)
+
+    # Find all anchor tags with hrefs pointing to the site's domain
+    anchor_pattern = re.compile(
+        rf'<a[^>]*href="((?:https?://(?:www\.)?{escaped})?(/[^\s"\'<>]+))"[^>]*>(.*?)</a>',
+        re.DOTALL | re.IGNORECASE
+    )
+
+    results = []
+    seen = set()
+    for m in anchor_pattern.finditer(content):
+        href = m.group(1)
+        text = re.sub(r'<[^>]+>', '', m.group(3)).strip()
+        text = text[:200]
+
+        if not _is_valid_title(text):
+            continue
+        if any(kw.lower() in text.lower() for kw in keywords):
+            # Build full URL
+            if href.startswith("http"):
+                full_url = href
+            else:
+                full_url = f"https://{domain}{href}" if href.startswith("/") else f"https://{domain}/{href}"
+
+            if full_url not in seen and '/search' not in full_url.lower():
+                seen.add(full_url)
+                results.append((text, full_url))
+
+    return results[:15]
+
+
+def search_fallback_parallel(site_domain, keywords, timeout=10, site_info=None):
+    """Direct site search fallback — fetches site's own search page.
+    No external search engines needed."""
+    if site_info:
+        return search_site_direct(site_info, keywords, timeout=timeout)
+    return []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Site Fetcher (single site — optimized)
+# ═══════════════════════════════════════════════════════════════════════
+
+def fetch_site(site_info, keywords, timeout, search_fallback, date_from, date_to):
+    """
+    Fetch deals from a single site.
+    Strategy:
+      1. RSS (8s, urllib only, no retry)
+      2. If RSS fails AND search_fallback enabled:
+         - Pepper sites: skip (use ScraperAPI)
+         - Non-Pepper: Google + Google News in PARALLEL (~10s)
+    """
+    rss_url = site_info["rss_url"].format(
+        q=urllib.parse.quote(keywords[0]) if keywords else ""
+    )
+
+    # 1. Try RSS (single attempt, urllib only)
+    content, backend = fetch_url(rss_url, timeout=timeout)
+
+    if content:
+        posts = parse_rss(content, site_info, keywords)
+        if posts:
+            for p in posts:
+                p["source"] = "rss"
+            return site_info, posts, f"rss ({backend})", None
+
+    # 2. RSS failed — skip Pepper sites (they need ScraperAPI)
+    if site_info.get("pepper", False):
+        return site_info, [], "skipped_pepper", "Cloudflare (use ScraperAPI)"
+
+    # 3. Non-Pepper: direct site search fallback (if enabled)
+    if search_fallback:
+        results = search_fallback_parallel(
+            site_info["domain"], keywords, timeout=10, site_info=site_info
+        )
+        if results:
+            posts = []
+            for title, url in results:
+                combined = (title + " " + url).lower()
+                if any(kw.lower() in combined for kw in keywords):
+                    posts.append({
+                        "site": site_info["site"],
+                        "domain": site_info["domain"],
+                        "country": site_info["country"],
+                        "title": title,
+                        "link": url,
+                        "pub_date": "",
+                        "summary": "",
+                        "price": extract_price(title),
+                        "temperature": "",
+                        "votes": "",
+                        "comments_count": "",
+                        "needs_browser": site_info.get("pepper", False),
+                        "source": "site_search",
+                    })
+            if posts:
+                return site_info, posts, "site_search", None
+
+    error = "RSS failed" if not content else "No keyword matches"
+    return site_info, [], "none", error
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Output Formatting
+# ═══════════════════════════════════════════════════════════════════════
+
+def output_json(all_posts, failed_sites, keywords, scan_date, elapsed):
+    """Generate JSON output."""
+    return json.dumps({
+        "keyword": " + ".join(keywords),
+        "scan_date": scan_date,
+        "elapsed_seconds": round(elapsed, 1),
+        "total_sites": len(DEAL_SITES),
+        "total_posts": len(all_posts),
+        "posts": all_posts,
+        "failed_sites": failed_sites,
+    }, ensure_ascii=False, indent=2)
+
+
+def output_csv(all_posts):
+    """Generate CSV output."""
+    if not all_posts:
+        return ""
+    output = io.StringIO()
+    fieldnames = ["country", "site", "title", "link", "pub_date",
+                  "price", "temperature", "votes", "comments_count",
+                  "needs_browser", "source", "summary"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for post in all_posts:
+        writer.writerow(post)
+    return output.getvalue()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Main
+# ═══════════════════════════════════════════════════════════════════════
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Deal Site RSS Batch Fetcher — scan 60+ deal sites worldwide"
+    )
+    parser.add_argument("-k", "--keyword", action="append", required=True,
+                        help="Search keyword (can be repeated for OR match)")
+    parser.add_argument("-c", "--countries", default="",
+                        help="Comma-separated country codes (us,ca,de,uk,fr,it,es,mx,pl,br,au,in,nl)")
+    parser.add_argument("--timeout", type=int, default=8,
+                        help="Per-site request timeout in seconds (default: 8)")
+    parser.add_argument("--output", default="json", choices=["json", "csv"],
+                        help="Output format (default: json)")
+    parser.add_argument("--search-fallback", action="store_true",
+                        help="Use Google search fallback for RSS-failed sites")
+    parser.add_argument("--workers", type=int, default=20,
+                        help="Concurrent workers (default: 20)")
+    parser.add_argument("--date-from", default="",
+                        help="Date range start (YYYY-MM-DD) for historical search")
+    parser.add_argument("--date-to", default="",
+                        help="Date range end (YYYY-MM-DD) for historical search")
+    parser.add_argument("--output-file", default="",
+                        help="Output file path (default: auto)")
+
+    args = parser.parse_args()
+    keywords = args.keyword
+
+    # Filter by country
+    sites = DEAL_SITES
+    if args.countries:
+        countries = [c.strip().lower() for c in args.countries.split(",")]
+        sites = [s for s in DEAL_SITES if s["country"] in countries]
+
+    scan_date = datetime.now().isoformat()
+    print(f"\n{'═'*60}")
+    print(f"  Deal Site RSS Fetcher")
+    print(f"  Keywords: {', '.join(keywords)} | Sites: {len(sites)} | Workers: {args.workers}")
+    print(f"  Timeout: {args.timeout}s per site | Backend: urllib only")
+    if args.search_fallback:
+        print(f"  Search fallback: ENABLED (direct site search)")
+    if args.date_from and args.date_to:
+        print(f"  Date range: {args.date_from} → {args.date_to}")
+    print(f"{'═'*60}\n")
+
+    all_posts = []
+    failed_sites = []
+    success_count = 0
+    fallback_count = 0
+    start_time = time.time()
+
+    # Concurrent fetching — all sites in parallel
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        future_to_site = {
+            executor.submit(
+                fetch_site, site, keywords, args.timeout,
+                args.search_fallback, args.date_from, args.date_to
+            ): site
+            for site in sites
+        }
+
+        for future in as_completed(future_to_site):
+            site = future_to_site[future]
+            elapsed = time.time() - start_time
+            try:
+                site_info, posts, source, error = future.result()
+                if posts:
+                    all_posts.extend(posts)
+                    if "fallback" in source or "search" in source:
+                        fallback_count += 1
+                    else:
+                        success_count += 1
+                    print(f"  [{elapsed:5.1f}s] [{site_info['country'].upper():2s}] {site_info['site']:25s} → {len(posts):3d} posts ({source})")
+                else:
+                    if error:
+                        failed_sites.append({"site": site_info["site"], "country": site_info["country"],
+                                              "error": error})
+                        print(f"  [{elapsed:5.1f}s] [{site_info['country'].upper():2s}] {site_info['site']:25s} → FAIL ({error})")
+            except Exception as e:
+                failed_sites.append({"site": site["site"], "country": site["country"],
+                                     "error": str(e)[:100]})
+                print(f"  [{elapsed:5.1f}s] [{site['country'].upper():2s}] {site['site']:25s} → ERROR ({str(e)[:50]})")
+
+    elapsed_total = time.time() - start_time
+
+    # Sort posts by country then date
+    all_posts.sort(key=lambda p: (p["country"], p.get("pub_date", "")), reverse=True)
+
+    # Output
+    print(f"\n{'═'*60}")
+    print(f"  RESULTS — {elapsed_total:.1f}s total")
+    print(f"{'═'*60}")
+    print(f"  Sites scanned:   {len(sites)}")
+    print(f"  Sites succeeded: {success_count} (RSS) + {fallback_count} (fallback)")
+    print(f"  Sites failed:    {len(failed_sites)}")
+    print(f"  Total posts:     {len(all_posts)}")
+
+    if all_posts:
+        countries_found = set(p["country"] for p in all_posts)
+        print(f"  Countries:       {', '.join(sorted(countries_found))}")
+        needs_browser = sum(1 for p in all_posts if p.get("needs_browser"))
+        print(f"  Needs browser:  {needs_browser} posts (Pepper sites)")
+
+        print(f"\n{'─'*60}")
+        for i, post in enumerate(all_posts, 1):
+            print(f"\n  #{i}")
+            print(f"  Site:      {post['site']} ({post['country'].upper()})")
+            print(f"  Title:     {post['title'][:80]}")
+            print(f"  Price:     {post.get('price', '—') or '—'}")
+            print(f"  Date:      {post.get('pub_date', '—') or '—'}")
+            print(f"  Source:    {post.get('source', 'rss')}")
+
+    # Save output
     if args.output == "csv":
-        import csv
-        w = csv.writer(sys.stdout)
-        w.writerow(["country", "site", "domain", "title", "link", "pub_date",
-                    "comments_count", "temperature", "votes", "needs_browser",
-                    "matched_keywords", "summary"])
-        for p in unique:
-            w.writerow([p["country"], p["site"], p["domain"], p["title"], p["link"],
-                        p["pub_date"], p.get("comments_count", ""), p.get("temperature", ""),
-                        p.get("votes", ""), p.get("needs_browser", False),
-                        "|".join(p["matched_keywords"]), p["summary"][:200]])
+        output_str = output_csv(all_posts)
+        ext = "csv"
     else:
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        output_str = output_json(all_posts, failed_sites, keywords, scan_date, elapsed_total)
+        ext = "json"
+
+    output_path = args.output_file or os.path.join(
+        OUTPUT_DIR, f"deal_results_{keywords[0].replace(' ', '_')}.{ext}"
+    )
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(output_str)
+
+    print(f"\n  Results saved to: {output_path}")
+    if failed_sites:
+        print(f"  Failed sites ({len(failed_sites)}):")
+        for fs in failed_sites[:10]:
+            print(f"    - {fs['site']} ({fs['country'].upper()}): {fs['error']}")
+        if len(failed_sites) > 10:
+            print(f"    ... and {len(failed_sites) - 10} more")
+    print(f"{'═'*60}\n")
 
 
 if __name__ == "__main__":

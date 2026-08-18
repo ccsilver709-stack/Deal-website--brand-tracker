@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deal Brand Tracker</title>
+<style>
+:root {
+  --bg: #0d0d0f;
+  --surface: #18181b;
+  --surface-hover: #1e1e22;
+  --surface-active: #25252a;
+  --border: #2e2e33;
+  --border-light: #3a3a40;
+  --text-primary: #f0f0f3;
+  --text-secondary: #a0a0a8;
+  --text-muted: #6a6a72;
+  --brand: #7c6aff;
+  --brand-light: #9d8fff;
+  --brand-dim: #2a2347;
+  --accent: #00c896;
+  --accent-dim: #0a3d33;
+  --warn: #ffb347;
+  --error: #ff5c5c;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f8f8fa;
+    --surface: #ffffff;
+    --surface-hover: #f3f3f5;
+    --surface-active: #eaeaed;
+    --border: #e2e2e6;
+    --border-light: #d2d2d6;
+    --text-primary: #1a1a1e;
+    --text-secondary: #5a5a62;
+    --text-muted: #9a9aa2;
+    --brand-dim: #edeaff;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--brand-light); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.app { max-width: 1200px; margin: 0 auto; padding: 24px 20px 60px; }
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.header-logo {
+  width: 36px; height: 36px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--brand) 0%, var(--accent) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: #fff;
+  flex-shrink: 0;
+}
+.header-title { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+.header-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* Search Panel */
+.search-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.search-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.input-group { flex: 1; }
+.input-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+.text-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+.text-input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+.text-input::placeholder { color: var(--text-muted); }
+
+/* Country chips */
+.country-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.chip:hover { border-color: var(--border-light); background: var(--surface-hover); }
+.chip.active {
+  border-color: var(--brand);
+  background: var(--brand-dim);
+  color: var(--brand-light);
+}
+.chip .count { color: var(--text-muted); font-size: 10px; }
+
+/* Date range */
+.date-row { display: flex; gap: 10px; align-items: flex-end; }
+.date-row .input-group { flex: 0 0 auto; }
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--brand-light); }
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--surface-active); }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text-secondary); }
+.tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--brand);
+}
+
+/* Loading */
+.loading-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+.loading-bar-inner {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--accent) 100%);
+  animation: slide 1.2s ease-in-out infinite;
+}
+@keyframes slide {
+  0% { width: 0%; margin-left: 0%; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+.loading-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* Stats bar */
+.stats-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+/* Results table */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.results-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+.results-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+.results-table tr:hover td { background: var(--surface-hover); }
+.results-table .col-title {
+  max-width: 360px;
+  color: var(--text-primary);
+}
+.results-table .col-title a {
+  color: var(--text-primary);
+}
+.results-table .col-link a {
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.results-table .col-price {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.results-table .col-country {
+  white-space: nowrap;
+}
+.results-table .col-site {
+  white-space: nowrap;
+}
+.country-flag { font-size: 11px; margin-right: 4px; }
+.tag-source {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--brand-dim);
+  color: var(--brand-light);
+}
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-text { font-size: 14px; }
+
+/* Error */
+.error-box {
+  padding: 14px 16px;
+  background: rgba(255, 92, 92, 0.08);
+  border: 1px solid rgba(255, 92, 92, 0.2);
+  border-radius: var(--radius);
+  margin: 16px 0;
+  font-size: 13px;
+  color: var(--error);
+}
+
+/* Log viewer */
+.log-viewer {
+  margin-top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.log-viewer pre {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-toggle {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-top: 12px;
+  display: inline-block;
+}
+.log-toggle:hover { color: var(--text-secondary); }
+
+/* Export button */
+.export-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* Sortable headers */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover { color: var(--brand-light); }
+
+/* Heat badge */
+.heat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.heat-hot { background: rgba(255, 100, 50, 0.15); color: #ff8855; }
+.heat-warm { background: rgba(255, 180, 50, 0.15); color: #ffb347; }
+.heat-cool { background: rgba(100, 180, 255, 0.1); color: #6ab4ff; }
+.heat-none { color: var(--text-muted); }
+
+/* Metric cell */
+.metric-cell {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ScraperAPI section */
+.api-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.api-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.api-section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.api-key-row { display: flex; gap: 10px; }
+.api-key-row .text-input { font-family: var(--font-mono); font-size: 13px; }
+.api-link {
+  font-size: 12px;
+  color: var(--brand-light);
+  margin-top: 8px;
+  display: inline-block;
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">D</div>
+    <div>
+      <div class="header-title">Deal Brand Tracker</div>
+      <div class="header-sub">Scan 60+ deal sites across 13 countries for brand mentions</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" id="tab-rss" onclick="switchTab('rss')">RSS Search</div>
+    <div class="tab" id="tab-api" onclick="switchTab('api')">ScraperAPI (Cloudflare bypass)</div>
+  </div>
+
+  <!-- Shared: Date Range + Country Filter -->
+  <div class="search-panel" style="margin-bottom:16px;">
+    <div class="date-row" style="margin-bottom: 14px;">
+      <div class="input-group">
+        <label class="input-label">Date From</label>
+        <input type="date" id="date-from" class="text-input">
+      </div>
+      <div class="input-group">
+        <label class="input-label">Date To</label>
+        <input type="date" id="date-to" class="text-input">
+      </div>
+    </div>
+    <div class="input-group">
+      <label class="input-label">Countries (click to toggle — applies to both modes)</label>
+      <div class="country-chips" id="country-chips"></div>
+    </div>
+  </div>
+
+  <!-- RSS Search Panel -->
+  <div id="panel-rss" class="search-panel">
+    <div class="search-row">
+      <div class="input-group">
+        <label class="input-label">Brand Keywords (comma-separated)</label>
+        <input type="text" id="keywords" class="text-input" placeholder="anker, soundcore" value="anker">
+      </div>
+    </div>
+    <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+      <button class="btn btn-primary" id="btn-search" onclick="searchRSS()">Search Deals</button>
+    </div>
+  </div>
+
+  <!-- ScraperAPI Panel -->
+  <div id="panel-api" class="api-section" style="display:none;">
+    <div class="api-section-title">ScraperAPI Cloudflare Bypass</div>
+    <div class="api-section-desc">Bypasses Cloudflare Managed Challenge on Pepper network sites (Slickdeals, MyDealz, HotUKDeals, etc.)</div>
+    <div class="search-row">
+      <div class="input-group">
+        <label class="input-label">Keyword</label>
+        <input type="text" id="api-keyword" class="text-input" placeholder="anker" value="anker">
+      </div>
+    </div>
+    <div class="api-key-row">
+      <div class="input-group" style="flex:1;">
+        <label class="input-label">ScraperAPI Key</label>
+        <input type="text" id="api-key" class="text-input" placeholder="c8ccc707022e..." style="font-family:var(--font-mono);">
+      </div>
+    </div>
+    <a class="api-link" href="https://www.scraperapi.com/signup/" target="_blank">Get free API key (5000 requests/month) →</a>
+    <div style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:var(--text-secondary);">
+        <input type="checkbox" id="api-full-mode" style="cursor:pointer;">
+        Full mode (with heat data)
+      </label>
+      <span style="font-size:11px; color:var(--text-muted);">Fast: ~15s, no heat | Full: ~60s, with heat</span>
+    </div>
+    <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
+      <button class="btn btn-primary" id="btn-api-search" onclick="searchScraperAPI()">Run ScraperAPI Scan</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" style="display:none;">
+    <div class="loading-bar"><div class="loading-bar-inner"></div></div>
+    <div class="loading-text" id="loading-text">Scanning deal sites...</div>
+  </div>
+
+  <!-- Error -->
+  <div id="error-box" class="error-box" style="display:none;"></div>
+
+  <!-- Results -->
+  <div id="results" style="display:none;">
+    <div class="stats-bar" id="stats-bar"></div>
+    <div class="export-row">
+      <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
+      <button class="btn btn-secondary" onclick="exportJSON()">Export JSON</button>
+    </div>
+    <div style="border:1px solid var(--border); border-radius:var(--radius-lg); overflow:auto; max-height:600px;">
+      <table class="results-table" id="results-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Country</th>
+            <th>Site</th>
+            <th>Title</th>
+            <th>Date</th>
+            <th>Price</th>
+            <th class="sortable" onclick="sortBy('heat')">Heat ↕</th>
+            <th class="sortable" onclick="sortBy('votes')">Votes ↕</th>
+            <th class="sortable" onclick="sortBy('comments')">Comments ↕</th>
+            <th>Source</th>
+            <th>Link</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+    <span class="log-toggle" id="log-toggle" onclick="toggleLog()" style="display:none;">Show execution log ▾</span>
+    <div class="log-viewer" id="log-viewer" style="display:none;"><pre id="log-content"></pre></div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty" class="empty">
+    <div class="empty-icon">🔍</div>
+    <div class="empty-text">Enter a brand keyword and click Search to scan deal sites</div>
+  </div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────────────
+let allPosts = [];
+let selectedCountries = new Set();
+let currentLog = "";
+let sortKey = "country";
+let sortDir = "asc";
+const COUNTRY_FLAGS = {
+  us:"🇺🇸",ca:"🇨🇦",de:"🇩🇪",uk:"🇬🇧",fr:"🇫🇷",it:"🇮🇹",es:"🇪🇸",
+  mx:"🇲🇽",pl:"🇵🇱",br:"🇧🇷",au:"🇦🇺",in:"🇮🇳",nl:"🇳🇱"
+};
+const COUNTRY_NAMES = {
+  us:"United States",ca:"Canada",de:"Germany",uk:"United Kingdom",
+  fr:"France",it:"Italy",es:"Spain",mx:"Mexico",pl:"Poland",
+  br:"Brazil",au:"Australia",in:"India",nl:"Netherlands"
+};
+
+// ─── Init ───────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const res = await fetch("/api/countries");
+    const data = await res.json();
+    const chips = document.getElementById("country-chips");
+    data.countries.forEach(c => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.dataset.code = c.code;
+      chip.innerHTML = `${COUNTRY_FLAGS[c.code]||""} ${c.code.toUpperCase()} <span class="count">${c.sites}</span>`;
+      chip.onclick = () => {
+        if (selectedCountries.has(c.code)) {
+          selectedCountries.delete(c.code);
+          chip.classList.remove("active");
+        } else {
+          selectedCountries.add(c.code);
+          chip.classList.add("active");
+        }
+      };
+      chips.appendChild(chip);
+    });
+  } catch(e) {
+    console.error("Failed to load countries:", e);
+  }
+}
+
+// ─── Tabs ────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById("tab-rss").classList.toggle("active", tab === "rss");
+  document.getElementById("tab-api").classList.toggle("active", tab === "api");
+  document.getElementById("panel-rss").style.display = tab === "rss" ? "" : "none";
+  document.getElementById("panel-api").style.display = tab === "api" ? "" : "none";
+}
+
+// ─── RSS Search ──────────────────────────────────────────────────────────────
+async function searchRSS() {
+  const kwInput = document.getElementById("keywords").value.trim();
+  if (!kwInput) return;
+  const keywords = kwInput.split(",").map(s => s.trim()).filter(Boolean);
+  const countries = Array.from(selectedCountries);
+  const dateFrom = document.getElementById("date-from").value;
+  const dateTo = document.getElementById("date-to").value;
+
+  showLoading("Scanning " + (countries.length || "all") + " countries via RSS...");
+  hideError();
+
+  try {
+    const res = await fetch("/api/search", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ keywords, countries, date_from: dateFrom, date_to: dateTo })
+    });
+    const data = await res.json();
+    hideLoading();
+
+    if (data.error) {
+      showError(data.error);
+      return;
+    }
+    allPosts = data.posts || [];
+    currentLog = data.log || "";
+    renderResults(allPosts, data.stats);
+  } catch(e) {
+    hideLoading();
+    showError("Request failed: " + e.message);
+  }
+}
+
+// ─── ScraperAPI Search ───────────────────────────────────────────────────────
+async function searchScraperAPI() {
+  const keyword = document.getElementById("api-keyword").value.trim();
+  const apiKey = document.getElementById("api-key").value.trim();
+  if (!keyword) { showError("Please enter a keyword"); return; }
+  if (!apiKey) { showError("Please enter your ScraperAPI key"); return; }
+
+  const dateFrom = document.getElementById("date-from").value;
+  const dateTo = document.getElementById("date-to").value;
+  const countries = Array.from(selectedCountries);
+  const fullMode = document.getElementById("api-full-mode").checked;
+
+  showLoading(fullMode ? "Fetching with JS rendering (heat data)... this takes ~2 min" : "Bypassing Cloudflare via ScraperAPI (fast mode)...");
+  hideError();
+
+  try {
+    const res = await fetch("/api/scraperapi", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        keyword, api_key: apiKey,
+        countries, date_from: dateFrom, date_to: dateTo,
+        full_mode: fullMode
+      })
+    });
+    const data = await res.json();
+    hideLoading();
+
+    if (data.error) {
+      showError(data.error);
+      return;
+    }
+    allPosts = data.posts || [];
+    currentLog = data.log || "";
+    renderResults(allPosts, {});
+  } catch(e) {
+    hideLoading();
+    showError("Request failed: " + e.message);
+  }
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+function renderResults(posts, stats) {
+  const empty = document.getElementById("empty");
+  const results = document.getElementById("results");
+  const body = document.getElementById("results-body");
+
+  if (!posts.length) {
+    empty.style.display = "";
+    results.style.display = "none";
+    empty.querySelector(".empty-text").textContent = "No deals found. Try different keywords or use ScraperAPI tab.";
+    return;
+  }
+
+  empty.style.display = "none";
+  results.style.display = "";
+
+  // Stats
+  const countries = new Set(posts.map(p => p.country));
+  const sites = new Set(posts.map(p => p.site || p.domain));
+  const totalHeat = posts.reduce((s, p) => s + (p.heat || 0), 0);
+  const totalComments = posts.reduce((s, p) => s + (p.comments || 0), 0);
+  const withHeat = posts.filter(p => (p.heat || 0) > 0).length;
+  const statsBar = document.getElementById("stats-bar");
+  statsBar.innerHTML = `
+    <div class="stat-item"><span class="stat-value">${posts.length}</span><span class="stat-label">Posts</span></div>
+    <div class="stat-item"><span class="stat-value">${countries.size}</span><span class="stat-label">Countries</span></div>
+    <div class="stat-item"><span class="stat-value">${sites.size}</span><span class="stat-label">Sites</span></div>
+    <div class="stat-item"><span class="stat-value">${totalHeat}</span><span class="stat-label">Total Heat</span></div>
+    <div class="stat-item"><span class="stat-value">${totalComments}</span><span class="stat-label">Comments</span></div>
+    <div class="stat-item"><span class="stat-value">${withHeat}</span><span class="stat-label">With Heat</span></div>
+  `;
+
+  // Sort
+  sortAndRender(posts, body);
+
+  // Log
+  if (currentLog) {
+    document.getElementById("log-toggle").style.display = "";
+    document.getElementById("log-content").textContent = currentLog;
+  } else {
+    document.getElementById("log-toggle").style.display = "none";
+  }
+}
+
+function sortAndRender(posts, body) {
+  posts.sort((a, b) => {
+    let va, vb;
+    if (sortKey === "country") {
+      va = a.country || ""; vb = b.country || "";
+      if (va !== vb) return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      return (b.pub_date || "").localeCompare(a.pub_date || "");
+    }
+    va = a[sortKey] || 0; vb = b[sortKey] || 0;
+    return sortDir === "asc" ? va - vb : vb - va;
+  });
+
+  body.innerHTML = posts.map((p, i) => {
+    const flag = COUNTRY_FLAGS[p.country] || "";
+    const site = p.site || p.domain || "";
+    const date = p.pub_date ? formatDate(p.pub_date) : "—";
+    const price = p.price || "—";
+    const link = p.link ? `<a href="${escapeHtml(p.link)}" target="_blank">open ↗</a>` : "—";
+    const source = p.source ? `<span class="tag-source">${escapeHtml(p.source)}</span>` : "";
+    const title = p.title ? escapeHtml(p.title.substring(0, 120)) : "";
+    const titleLink = p.link
+      ? `<a href="${escapeHtml(p.link)}" target="_blank">${title}</a>`
+      : title;
+
+    // Heat badge
+    const heat = p.heat || 0;
+    let heatClass = "heat-none";
+    let heatIcon = "—";
+    if (heat >= 100) { heatClass = "heat-hot"; heatIcon = "🔥"; }
+    else if (heat >= 50) { heatClass = "heat-warm"; heatIcon = "⚡"; }
+    else if (heat > 0) { heatClass = "heat-cool"; heatIcon = "❄"; }
+    const heatHtml = heat > 0
+      ? `<span class="heat-badge ${heatClass}">${heatIcon} ${heat}°</span>`
+      : `<span class="heat-none">—</span>`;
+
+    const votes = p.votes || 0;
+    const comments = p.comments || 0;
+
+    return `<tr>
+      <td>${i + 1}</td>
+      <td class="col-country">${flag} ${escapeHtml((p.country||"").toUpperCase())}</td>
+      <td class="col-site">${escapeHtml(site)}</td>
+      <td class="col-title">${titleLink}</td>
+      <td>${date}</td>
+      <td class="col-price">${escapeHtml(price)}</td>
+      <td>${heatHtml}</td>
+      <td class="metric-cell">${votes > 0 ? "👍 " + votes : "—"}</td>
+      <td class="metric-cell">${comments > 0 ? "💬 " + comments : "—"}</td>
+      <td>${source}</td>
+      <td class="col-link">${link}</td>
+    </tr>`;
+  }).join("");
+}
+
+function sortBy(key) {
+  if (sortKey === key) {
+    sortDir = sortDir === "asc" ? "desc" : "asc";
+  } else {
+    sortKey = key;
+    sortDir = "desc";
+  }
+  const body = document.getElementById("results-body");
+  sortAndRender([...allPosts], body);
+}
+
+function toggleLog() {
+  const viewer = document.getElementById("log-viewer");
+  const toggle = document.getElementById("log-toggle");
+  if (viewer.style.display === "none") {
+    viewer.style.display = "";
+    toggle.textContent = "Hide execution log ▴";
+  } else {
+    viewer.style.display = "none";
+    toggle.textContent = "Show execution log ▾";
+  }
+}
+
+// ─── Export ─────────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (!allPosts.length) return;
+  const headers = ["#","country","site","title","date","price","heat","votes","comments","source","link"];
+  const rows = allPosts.map((p, i) => [
+    i+1, p.country||"", p.site||p.domain||"",
+    `"${(p.title||"").replace(/"/g,'""')}"`,
+    p.pub_date||"", p.price||"",
+    p.heat||0, p.votes||0, p.comments||0,
+    p.source||"", p.link||""
+  ]);
+  const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+  downloadFile(csv, "deals.csv", "text/csv");
+}
+
+function exportJSON() {
+  if (!allPosts.length) return;
+  downloadFile(JSON.stringify(allPosts, null, 2), "deals.json", "application/json");
+}
+
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function showLoading(text) {
+  document.getElementById("loading").style.display = "";
+  document.getElementById("loading-text").textContent = text;
+  document.getElementById("btn-search").disabled = true;
+  document.getElementById("btn-api-search").disabled = true;
+}
+function hideLoading() {
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("btn-search").disabled = false;
+  document.getElementById("btn-api-search").disabled = false;
+}
+function showError(msg) {
+  const box = document.getElementById("error-box");
+  box.textContent = msg;
+  box.style.display = "";
+}
+function hideError() {
+  document.getElementById("error-box").style.display = "none";
+}
+function formatDate(d) {
+  if (!d) return "—";
+  try {
+    const date = new Date(d);
+    if (isNaN(date)) return d.substring(0, 16);
+    return date.toISOString().substring(0, 10);
+  } catch { return d; }
+}
+function escapeHtml(str) {
+  if (!str) return "";
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ─── Boot ───────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
