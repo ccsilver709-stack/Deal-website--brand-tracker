@@ -101,7 +101,26 @@ https://www.<域名>/rss/search?q=<关键词>
 | 原价 | 正文中划掉的原价 |
 | 帖子类型 | Hot / New / Expired |
 
-操作：浏览器打开帖子链接，页面加载后提取；遇 Cloudflare 验证等待几秒或刷新；匹配超 20 条时优先处理 Pepper 高流量站，小站可填"—"。
+**浏览器补全操作步骤（逐条执行）：**
+
+1. **筛选**：从脚本输出中挑出 `needs_browser: true` 的帖子（主要是 Pepper 站和 Google 回退结果）
+2. **打开链接**：用浏览器打开帖子的 `link` 字段。注意：`source=google_news_fallback` 的链接是 Google News 跳转链，打开后会自动重定向到原帖，等待重定向完成
+3. **处理 Cloudflare 验证**：如遇"正在进行安全验证"页面，调用 `interaction.request_action`（type=browserControl）请求用户点击"请验证您是真人"复选框，验证通过后页面自动加载
+4. **关闭弹窗**：页面加载后如出现 cookie 同意弹窗，点击"Accept all"或"接受"关闭
+5. **提取数据**（按站点类型定位）：
+
+| 站点类型 | 🔥热度/温度 | 点赞/投票 | 评论数 |
+|---------|------------|----------|--------|
+| Pepper 站（HotUKDeals/MyDealz/Dealabs 等） | 帖子标题旁火焰图标+数字（如 🔥80°） | 温度数字即净投票；或单独的👍👎按钮旁数字 | 评论图标旁数字（如 💬0） |
+| RedFlagDeals | 左侧 SCORE 区域（如 +4） | 👍up/👎down 按钮旁数字（如 👍13 👎9） | 分页导航（如 Page 3 of 3）表示评论多 |
+| OzBargain | 帖子左侧 +数字（如 +45） | 同上，+up/-down | COMMENTS 区域标题旁或评论条数 |
+| Reddit | 帖子上方 upvotes 数 | 同上 | 评论链接旁数字 |
+
+6. **提取价格**：Deal 价格在标题下方大字显示（如 £39.99、$699），原价通常是划掉的小字
+7. **填回表格**：把提取到的热度、投票、评论、价格填入对应帖子的输出表格
+8. **批量处理策略**：匹配超 20 条时，优先补全 Pepper 高流量站（HotUKDeals/Slickdeals/MyDealz/RedFlagDeals/OzBargain），小站互动数据可填"—"
+
+**实测验证参考**：Anker 测试中，浏览器补全 3 条 Pepper 帖成功——HotUKDeals 提取到 🔥80°+0评论+£39.99；RedFlagDeals 提取到 +4投票(👍13👎9)+多页评论+$65.69；OzBargain 提取到 +45投票+$699。
 
 ---
 
