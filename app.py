@@ -255,6 +255,6 @@ def health():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 7860))
+    port = 7860
     print(f"\n  Deal Brand Tracker app running → http://localhost:{port}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
