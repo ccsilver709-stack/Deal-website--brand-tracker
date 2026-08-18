@@ -389,8 +389,9 @@ def parse_date(date_str):
         return None
     date_str = date_str.strip()
     for fmt in ("%Y-%m-%d %H:%M %Z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S",
+                 "%Y-%m-%d %H:%M", "%Y-%m-%d",
                  "%a, %d %b %Y %H:%M:%S %Z", "%a, %d %b %Y %H:%M:%S %z",
-                 "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
+                 "%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
         try:
             dt = datetime.strptime(date_str, fmt)
             if dt.tzinfo is not None:
@@ -448,7 +449,6 @@ def extract_date_from_html(html_context):
         (r'vor\s+(\d+)\s*(?:stunden?|std|minuten?|mins?|tagen?|wochen?)', 'hours'),
         (r'gestern', 'yesterday'),
         (r'il y a\s+(\d+)\s*(?:heures?|hrs?|minutes?|mins?|jours?|semaines?)', 'hours'),
-        (r"hier", 'yesterday'),
         (r'hace\s+(\d+)\s*(?:horas?|hrs?|minutos?|mins?|días?|dias?|semanas?)', 'hours'),
         (r'ayer', 'yesterday'),
         (r'temu\s+(\d+)\s*(?:godzin|h|min|dni|dzień|tygodni|w)', 'hours'),

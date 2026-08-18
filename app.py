@@ -58,7 +58,7 @@ def filter_posts_by_date(posts, date_from, date_to):
         for fmt in ("%Y-%m-%d %H:%M %Z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S",
                      "%Y-%m-%d %H:%M", "%Y-%m-%d",
                      "%a, %d %b %Y %H:%M:%S %Z", "%a, %d %b %Y %H:%M:%S %z",
-                     "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
+                     "%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
             try:
                 dt = datetime.strptime(d, fmt)
                 # Normalize to naive UTC for comparison

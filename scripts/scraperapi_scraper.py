@@ -242,7 +242,6 @@ def extract_date(html_context):
         (r'il y a\s+(\d+)\s*(?:minutes?|mins?|heures?|hrs?|h)', 'hours'),
         (r'il y a\s+(\d+)\s*(?:jours?|jour|j)', 'days'),
         (r'il y a\s+(\d+)\s*(?:semaines?|semaine)', 'weeks'),
-        (r"hier", 'yesterday'),
     ]
     # Spanish / Portuguese
     rel_patterns_es = [
@@ -297,7 +296,8 @@ def parse_date(date_str):
     formats = [
         '%a, %d %b %Y %H:%M:%S %z', '%a, %d %b %Y %H:%M:%S %Z',
         '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%d %H:%M:%S', '%Y-%m-%d',
+        '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d',
+        '%d.%m.%Y', '%d/%m/%Y', '%d-%m-%Y', '%b %d, %Y', '%d %b %Y',
     ]
     for fmt in formats:
         try:
