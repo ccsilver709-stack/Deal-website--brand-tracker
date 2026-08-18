@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Deal Sites Configuration (60+ sites, 11+ countries)
@@ -317,6 +317,11 @@ def parse_rss(xml_text, site_info, keywords):
             if summary_el is not None and summary_el.text:
                 summary = summary_el.text
             pub_date = date_el.text if date_el is not None and date_el.text else ""
+            pub_date_parsed = ""
+            if pub_date:
+                dt = parse_date(pub_date.strip())
+                if dt:
+                    pub_date_parsed = dt.strftime('%Y-%m-%d %H:%M %Z')
 
             # Keyword filtering (OR match — any keyword hits)
             combined = (title + " " + summary).lower()
@@ -338,6 +343,7 @@ def parse_rss(xml_text, site_info, keywords):
                 "title": title.strip(),
                 "link": link.strip(),
                 "pub_date": pub_date.strip(),
+                "pub_date_parsed": pub_date_parsed,
                 "summary": summary[:500] if summary else "",
                 "price": extract_price(title) or extract_price(summary),
                 "temperature": "",
@@ -375,6 +381,117 @@ def _is_valid_title(title):
     if alpha_count < len(title) * 0.4:
         return False
     return True
+
+
+def parse_date(date_str):
+    """Parse various date formats and return timezone-aware datetime or None."""
+    if not date_str:
+        return None
+    date_str = date_str.strip()
+    for fmt in ("%Y-%m-%d %H:%M %Z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S",
+                 "%a, %d %b %Y %H:%M:%S %Z", "%a, %d %b %Y %H:%M:%S %z",
+                 "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(tz=None).replace(tzinfo=None)
+            return dt
+        except (ValueError, TypeError):
+            continue
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(tz=None).replace(tzinfo=None)
+        return dt
+    except (ValueError, AttributeError):
+        return None
+
+
+def extract_date_from_html(html_context):
+    """Extract publication date from HTML context. Returns (raw_date, parsed_date_str)."""
+    now = datetime.now(timezone.utc)
+
+    # 1. <time datetime="..."> or data attributes
+    for attr in ['datetime', 'title', 'data-date', 'data-timestamp', 'data-time', 'content']:
+        m = re.search(r'<time[^>]*' + attr + r'="([^"]+)"', html_context, re.I)
+        if m:
+            raw = m.group(1).strip()
+            dt = parse_date(raw)
+            if dt:
+                return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+            if raw.isdigit() and len(raw) >= 10:
+                try:
+                    ts = int(raw[:10])
+                    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+                except (ValueError, OSError):
+                    pass
+
+    # 2. JSON-LD date patterns
+    for p in [r'"datePublished"\s*:\s*"([^"]+)"', r'"dateCreated"\s*:\s*"([^"]+)"',
+              r'data-published="([^"]+)"', r'data-submitted="([^"]+)"']:
+        m = re.search(p, html_context, re.I)
+        if m:
+            raw = m.group(1).strip()
+            dt = parse_date(raw)
+            if dt:
+                return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    # 3. Relative time — multi-language
+    rel_patterns = [
+        (r'(\d+)\s*(?:min|minute|m)\s*(?:ago|old)', 'minutes'),
+        (r'(\d+)\s*(?:h|hour|hr)\s*(?:ago|old)', 'hours'),
+        (r'(\d+)\s*(?:d|day)\s*(?:ago|old)', 'days'),
+        (r'(\d+)\s*(?:w|week)\s*(?:ago|old)', 'weeks'),
+        (r'just\s*now', 'just_now'),
+        (r'yesterday', 'yesterday'),
+        (r'vor\s+(\d+)\s*(?:min|stunde|std|tag|woche)', 'hours'),
+        (r'gestern', 'yesterday'),
+        (r'il y a\s+(\d+)\s*(?:min|h|heure|jour|semaine)', 'hours'),
+        (r"hier", 'yesterday'),
+        (r'hace\s+(\d+)\s*(?:min|h|hora|día|dia|semana)', 'hours'),
+        (r'ayer', 'yesterday'),
+        (r'temu\s+(\d+)\s*(?:min|h|godz|dzień|tydzień)', 'hours'),
+        (r'(\d+)\s*(?:小时|天|周)前', 'hours'),
+        (r'刚刚', 'just_now'),
+        (r'昨天', 'yesterday'),
+    ]
+    for pattern, unit in rel_patterns:
+        m = re.search(pattern, html_context, re.I)
+        if m:
+            raw = m.group(0).strip()
+            if unit == 'just_now':
+                dt = now
+            elif unit == 'yesterday':
+                dt = now - timedelta(days=1)
+            else:
+                try:
+                    val = int(m.group(1))
+                    delta = timedelta(**{unit: val})
+                    dt = now - delta
+                except (IndexError, ValueError):
+                    continue
+            return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    # 4. Absolute date in URL or context
+    url_date = re.search(r'/(20\d{2})/(\d{1,2})/(\d{1,2})/', html_context)
+    if url_date:
+        raw = f"{url_date.group(1)}-{url_date.group(2)}-{url_date.group(3)}"
+        dt = parse_date(raw)
+        if dt:
+            return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    abs_patterns = [r'(\w{3}\s+\d{1,2},?\s+\d{4})', r'(\d{1,2}[\./]\d{1,2}[\./]\d{4})',
+                    r'(20\d{2}[\./-]\d{1,2}[\./-]\d{1,2})']
+    for p in abs_patterns:
+        m = re.search(p, html_context)
+        if m:
+            raw = m.group(1).strip()
+            dt = parse_date(raw)
+            if dt:
+                return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    return "", ""
 
 
 def search_site_direct(site_info, keywords, timeout=10):
@@ -418,7 +535,12 @@ def search_site_direct(site_info, keywords, timeout=10):
 
             if full_url not in seen and '/search' not in full_url.lower():
                 seen.add(full_url)
-                results.append((text, full_url))
+                # Extract date from surrounding HTML context
+                ctx_start = max(0, m.start() - 800)
+                ctx_end = min(len(content), m.end() + 800)
+                context = content[ctx_start:ctx_end]
+                pub_date, pub_date_parsed = extract_date_from_html(context)
+                results.append((text, full_url, pub_date, pub_date_parsed))
 
     return results[:15]
 
@@ -469,7 +591,7 @@ def fetch_site(site_info, keywords, timeout, search_fallback, date_from, date_to
         )
         if results:
             posts = []
-            for title, url in results:
+            for title, url, pub_date, pub_date_parsed in results:
                 combined = (title + " " + url).lower()
                 if any(kw.lower() in combined for kw in keywords):
                     posts.append({
@@ -478,7 +600,8 @@ def fetch_site(site_info, keywords, timeout, search_fallback, date_from, date_to
                         "country": site_info["country"],
                         "title": title,
                         "link": url,
-                        "pub_date": "",
+                        "pub_date": pub_date,
+                        "pub_date_parsed": pub_date_parsed,
                         "summary": "",
                         "price": extract_price(title),
                         "temperature": "",
