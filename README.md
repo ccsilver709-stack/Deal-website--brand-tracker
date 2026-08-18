@@ -2,7 +2,6 @@
 title: Deal-scraper
 sdk: docker
 emoji: 🔍
-app_port: 5000
 ---
 
 # Deal Brand Tracker — Web Application
