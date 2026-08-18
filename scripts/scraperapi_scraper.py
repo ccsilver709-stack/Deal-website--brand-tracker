@@ -221,41 +221,41 @@ def extract_date(html_context):
 
     # 3. Relative time — English
     rel_patterns_en = [
-        (r'(\d+)\s*(?:min|minute|m)\s*(?:ago|old)', 'minutes'),
-        (r'(\d+)\s*(?:h|hour|hr)\s*(?:ago|old)', 'hours'),
-        (r'(\d+)\s*(?:d|day)\s*(?:ago|old)', 'days'),
-        (r'(\d+)\s*(?:w|week)\s*(?:ago|old)', 'weeks'),
-        (r'(\d+)\s*(?:mo|month)\s*(?:ago|old)', 'months'),
+        (r'(\d+)\s*(?:minutes?|mins?|m)\s*(?:ago|old)', 'minutes'),
+        (r'(\d+)\s*(?:hours?|hrs?|h)\s*(?:ago|old)', 'hours'),
+        (r'(\d+)\s*(?:days?|d)\s*(?:ago|old)', 'days'),
+        (r'(\d+)\s*(?:weeks?|w)\s*(?:ago|old)', 'weeks'),
+        (r'(\d+)\s*(?:months?|mos?)\s*(?:ago|old)', 'months'),
         (r'just\s*now', 'just_now'),
         (r'yesterday', 'yesterday'),
     ]
     # German
     rel_patterns_de = [
-        (r'vor\s+(\d+)\s*(?:min|minute|m)', 'minutes'),
-        (r'vor\s+(\d+)\s*(?:h|stunde|std)', 'hours'),
-        (r'vor\s+(\d+)\s*(?:t|tag|tag)', 'days'),
-        (r'vor\s+(\d+)\s*(?:w|woche)', 'weeks'),
+        (r'vor\s+(\d+)\s*(?:minuten?|mins?|m)', 'minutes'),
+        (r'vor\s+(\d+)\s*(?:stunden?|std|h)', 'hours'),
+        (r'vor\s+(\d+)\s*(?:tagen?|tag|t)', 'days'),
+        (r'vor\s+(\d+)\s*(?:wochen?|woche|w)', 'weeks'),
         (r'gestern', 'yesterday'),
     ]
     # French
     rel_patterns_fr = [
-        (r'il y a\s+(\d+)\s*(?:min|h|heure)', 'hours'),
-        (r'il y a\s+(\d+)\s*(?:j|jour)', 'days'),
-        (r'il y a\s+(\d+)\s*(?:semaine)', 'weeks'),
+        (r'il y a\s+(\d+)\s*(?:minutes?|mins?|heures?|hrs?|h)', 'hours'),
+        (r'il y a\s+(\d+)\s*(?:jours?|jour|j)', 'days'),
+        (r'il y a\s+(\d+)\s*(?:semaines?|semaine)', 'weeks'),
         (r"hier", 'yesterday'),
     ]
     # Spanish / Portuguese
     rel_patterns_es = [
-        (r'hace\s+(\d+)\s*(?:min|h|hora)', 'hours'),
-        (r'hace\s+(\d+)\s*(?:d|dia|día)', 'days'),
-        (r'hace\s+(\d+)\s*(?:semana)', 'weeks'),
+        (r'hace\s+(\d+)\s*(?:minutos?|mins?|horas?|hrs?|h)', 'hours'),
+        (r'hace\s+(\d+)\s*(?:días?|dias?|día|dia|d)', 'days'),
+        (r'hace\s+(\d+)\s*(?:semanas?|semana)', 'weeks'),
         (r'ayer', 'yesterday'),
     ]
     # Polish
     rel_patterns_pl = [
-        (r'temu\s+(\d+)\s*(?:min|h|godz)', 'hours'),
-        (r'temu\s+(\d+)\s*(?:d|dzień)', 'days'),
-        (r'temu\s+(\d+)\s*(?:tydzień)', 'weeks'),
+        (r'temu\s+(\d+)\s*(?:minut|min|godzin|godz|h)', 'hours'),
+        (r'temu\s+(\d+)\s*(?:dni|dzień|d)', 'days'),
+        (r'temu\s+(\d+)\s*(?:tygodni|tydzień|w)', 'weeks'),
     ]
 
     all_patterns = rel_patterns_en + rel_patterns_de + rel_patterns_fr + rel_patterns_es + rel_patterns_pl
