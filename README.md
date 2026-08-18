@@ -1,3 +1,10 @@
+---
+title: Deal-scraper
+sdk: docker
+emoji: 🔍
+app_port: 5000
+---
+
 # Deal Brand Tracker — Web Application
 
 Scan 60+ deal sites across 13 countries for brand mentions. Input a brand keyword, get deal posts with title, date, price, source, and link.
