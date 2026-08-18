@@ -47,7 +47,7 @@ COUNTRIES = [
 
 def filter_posts_by_date(posts, date_from, date_to):
     """Post-filter results by date range. Handles various date formats.
-    Posts without a parseable date are EXCLUDED when date filter is active."""
+    Posts without a parseable date are KEPT (not excluded) when date filter is active."""
     if not date_from and not date_to:
         return posts
 
@@ -82,8 +82,9 @@ def filter_posts_by_date(posts, date_from, date_to):
     filtered = []
     for p in posts:
         pd = parse_d(p.get("pub_date") or p.get("pub_date_parsed") or "")
-        # If date filter is active but post has no date → exclude it
+        # If post has no parseable date → keep it (don't exclude by date filter)
         if pd is None:
+            filtered.append(p)
             continue
         if d_from and pd < d_from:
             continue
