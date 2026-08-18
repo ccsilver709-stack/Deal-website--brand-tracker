@@ -56,8 +56,9 @@ def filter_posts_by_date(posts, date_from, date_to):
             return None
         d = d.strip()
         for fmt in ("%Y-%m-%d %H:%M %Z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S",
+                     "%Y-%m-%d %H:%M", "%Y-%m-%d",
                      "%a, %d %b %Y %H:%M:%S %Z", "%a, %d %b %Y %H:%M:%S %z",
-                     "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                     "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%d %b %Y"):
             try:
                 dt = datetime.strptime(d, fmt)
                 # Normalize to naive UTC for comparison
@@ -81,7 +82,10 @@ def filter_posts_by_date(posts, date_from, date_to):
 
     filtered = []
     for p in posts:
-        pd = parse_d(p.get("pub_date") or p.get("pub_date_parsed") or "")
+        # Try pub_date_parsed first (already normalized), then pub_date
+        pd = parse_d(p.get("pub_date_parsed") or "")
+        if pd is None:
+            pd = parse_d(p.get("pub_date") or "")
         # If post has no parseable date → keep it (don't exclude by date filter)
         if pd is None:
             filtered.append(p)
@@ -161,9 +165,13 @@ def search():
                 results = json.load(f)
             # Clean up temp file
             output_file.unlink(missing_ok=True)
+            # Apply date filter (rss_fetch.py doesn't filter internally)
+            posts = results.get("posts", [])
+            if date_from or date_to:
+                posts = filter_posts_by_date(posts, date_from, date_to)
             return jsonify({
                 "ok": True,
-                "posts": results.get("posts", []),
+                "posts": posts,
                 "stats": results.get("stats", {}),
                 "log": result.stdout[-3000:] if result.stdout else ""
             })
