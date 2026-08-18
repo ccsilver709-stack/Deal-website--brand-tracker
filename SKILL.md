@@ -39,6 +39,7 @@ python scripts/rss_fetch.py -k "品牌词1" -k "品牌词2" -c us,de,uk --search
 - `--output json|csv`：输出格式，默认 JSON
 - `--search-fallback`：RSS 失败站点用 Google News 搜索回退（只匹配标题，减少噪音）
 - `--workers`：并发线程数，默认 10（全量 62 站 1-2 分钟完成）
+- `--date-from` / `--date-to`：**历史时间段搜索**（格式 YYYY-MM-DD）。RSS 只保留最近 7 天帖，指定日期范围后，对无匹配站点自动用 Bing + Google News 限定时间范围搜索历史帖。示例：`--date-from 2026-08-10 --date-to 2026-08-16`
 
 脚本纯 Python 标准库，无第三方依赖，**10 线程并发抓取**。输出 JSON 包含 `posts` 数组，每条含：
 - `site/domain/country/title/link/pub_date/summary` — 基础信息
@@ -46,6 +47,13 @@ python scripts/rss_fetch.py -k "品牌词1" -k "品牌词2" -c us,de,uk --search
 - `temperature` — 温度/热度（Pepper 站为空，需第二步补全）
 - `votes` — 点赞/投票数（Pepper 站为空，需第二步补全）
 - `needs_browser` — `true`=必须浏览器补全，`false`=数据已齐全
+- `source` — 数据来源：无此字段=RSS 直连；`date_search_google`/`date_search_bing`=历史时间段搜索回退
+
+**历史时间段搜索示例**（RSS 只保留最近 7 天，查更早的帖用日期范围）：
+```bash
+python scripts/rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
+```
+脚本会先跑 RSS，再对无匹配站点自动用搜索引擎限定时间范围搜索，合并结果输出。
 
 #### 方式 B：手动请求 RSS（无脚本环境时）
 

@@ -22,6 +22,18 @@ python scripts/rss_fetch.py -k anker -k navimow -c us,de,uk
 - `-k` 品牌关键词，可多次
 - `-c` 国家过滤（us,de,uk,fr...），留空扫全部
 - `--output json|csv`
+- `--search-fallback` RSS 失败站自动用 Google News 回退
+- `--workers` 并发线程数，默认 10
+
+### 查历史时间段的帖
+
+RSS 只保留最近 7 天的帖子。要查更早的历史 deal 帖，用日期范围参数：
+
+```bash
+python scripts/rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
+```
+
+脚本会先跑 RSS，再对无匹配站点自动用 Bing + Google News 限定时间范围搜索，合并输出。测试验证：anker 限定 8/10-8/16 找到 30 条，覆盖 Slickdeals/HotUKDeals/RedFlagDeals/LatestDeals/OzBargain 等 8 站。
 
 ## 给 AI 助手用
 
