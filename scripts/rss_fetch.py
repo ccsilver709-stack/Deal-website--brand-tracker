@@ -322,6 +322,86 @@ def search_google_news(site, keywords, timeout=15):
     return results
 
 
+def search_by_date_range(site, keywords, date_from, date_to, timeout=15):
+    """搜索引擎时间范围回退：Bing 普通搜索优先（收录全），Google News 备选"""
+    results = []
+    query_kw = " ".join(keywords)
+
+    def is_likely_deal_post(title):
+        """过滤明显非 deal 的讨论帖（Reddit 问答、吐槽等）"""
+        t = title.lower()
+        non_deal_patterns = ["what is your response", "unbearable", "subreddit", "ama ",
+                             "how's the", "review", "vs the", "got tired", "ugliest spot",
+                             "agronomy", "should i return", "you killed"]
+        return not any(p in t for p in non_deal_patterns)
+
+    # 引擎1: Bing 普通搜索 RSS（收录最全，优先）
+    try:
+        q = quote_plus(f"site:{site['domain']} {query_kw}")
+        url = f"https://www.bing.com/search?q={q}&format=rss"
+        raw = fetch_url(url, timeout)
+        if raw:
+            root = ET.fromstring(raw)
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+            for item in root.findall(".//atom:entry", ns):
+                title = unescape((item.findtext("atom:title", default="", namespaces=ns) or "").strip())
+                if not any(kw.lower() in title.lower() for kw in keywords):
+                    continue
+                if not is_likely_deal_post(title):
+                    continue
+                link_elem = item.find("atom:link", ns)
+                link = link_elem.get("href", "") if link_elem is not None else ""
+                pub_date = (item.findtext("atom:pubDate", default="", namespaces=ns) or
+                            item.findtext("atom:updated", default="", namespaces=ns) or "").strip()
+                summary = re.sub(r"<[^>]+>", "", item.findtext("atom:summary", default="", namespaces=ns) or "")
+                results.append({
+                    "site": site["name"], "domain": site["domain"],
+                    "country": site["country"].upper(), "title": title,
+                    "link": link, "pub_date": pub_date,
+                    "summary": summary[:500],
+                    "comments_count": "", "comments_link": "",
+                    "temperature": "", "votes": "",
+                    "needs_browser": True,
+                    "matched_keywords": [kw for kw in keywords if kw.lower() in title.lower()],
+                    "source": "date_search_bing",
+                })
+    except Exception:
+        pass
+
+    # 引擎2: Google News RSS（Bing 没结果时备选）
+    if not results:
+        try:
+            q = quote_plus(f"site:{site['domain']} {query_kw} after:{date_from} before:{date_to}")
+            url = f"https://news.google.com/rss/search?q={q}&hl=en"
+            raw = fetch_url(url, timeout)
+            if raw:
+                root = ET.fromstring(raw)
+                for item in root.findall(".//item"):
+                    title = unescape((item.findtext("title") or "").strip())
+                    if not any(kw.lower() in title.lower() for kw in keywords):
+                        continue
+                    if not is_likely_deal_post(title):
+                        continue
+                    link = (item.findtext("link") or "").strip()
+                    pub_date = (item.findtext("pubDate") or "").strip()
+                    summary = re.sub(r"<[^>]+>", "", item.findtext("description") or "")
+                    results.append({
+                        "site": site["name"], "domain": site["domain"],
+                        "country": site["country"].upper(), "title": title,
+                        "link": link, "pub_date": pub_date,
+                        "summary": summary[:500],
+                        "comments_count": "", "comments_link": "",
+                        "temperature": "", "votes": "",
+                        "needs_browser": True,
+                        "matched_keywords": [kw for kw in keywords if kw.lower() in title.lower()],
+                        "source": "date_search_google",
+                    })
+        except Exception:
+            pass
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Deal 站品牌关键词监测 v4（并发抓取）")
     parser.add_argument("-k", "--keyword", action="append", required=True, help="品牌关键词，可多次传入")
@@ -330,6 +410,8 @@ def main():
     parser.add_argument("--output", choices=["json", "csv"], default="json", help="输出格式")
     parser.add_argument("--search-fallback", action="store_true", help="失败站点用 Google News 搜索回退")
     parser.add_argument("--workers", type=int, default=10, help="并发线程数，默认 10")
+    parser.add_argument("--date-from", default="", help="起始日期 YYYY-MM-DD，限定搜索时间范围")
+    parser.add_argument("--date-to", default="", help="结束日期 YYYY-MM-DD，限定搜索时间范围")
     args = parser.parse_args()
 
     keywords = args.keyword
@@ -389,6 +471,31 @@ def main():
                         print(f"  [回退OK] {site['name']}: {len(posts)} 条", file=sys.stderr)
                 except Exception:
                     pass
+
+    # 日期范围搜索回退（方案A）：指定 --date-from/--date-to 时，对无匹配站点用搜索引擎限定时间范围
+    if args.date_from and args.date_to:
+        # 找出 RSS 阶段无匹配的站点
+        matched_domains = {p["domain"] for p in all_posts}
+        date_search_sites = [s for s in sites if s["domain"] not in matched_domains]
+        if date_search_sites:
+            print(f"\n日期范围搜索 {args.date_from} ~ {args.date_to}，覆盖 {len(date_search_sites)} 个无匹配站点...", file=sys.stderr)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {
+                    executor.submit(search_by_date_range, site, keywords, args.date_from, args.date_to, args.timeout + 5): site
+                    for site in date_search_sites
+                }
+                for future in as_completed(futures):
+                    site = futures[future]
+                    try:
+                        posts = future.result()
+                        if posts:
+                            all_posts.extend(posts)
+                            if site["domain"] in failed_sites:
+                                failed_sites.remove(site["domain"])
+                                success_count += 1
+                            print(f"  [日期搜索OK] {site['name']}: {len(posts)} 条", file=sys.stderr)
+                    except Exception:
+                        pass
 
     # 去重
     seen = set()

@@ -1,0 +1,30 @@
+﻿python : 扫描 62 个站点，关键词: ['navimow']，并发: 10
+At line:1 char:11129
++ ... d-tracker"; python scripts/rss_fetch.py -k navimow --search-fallback  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (扫描 62 个站点，关键词: ['navimow']，并发: 10:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  [FAIL] MyVipon: proxy_failed
+  [FAIL] eDealInfo: proxy_failed
+  [FAIL] BensBargains: proxy_failed
+  [FAIL] Slickdeals: proxy_failed
+  [FAIL] ShopSale: proxy_failed
+  [FAIL] Koupon.ai: no_rss
+  [FAIL] SimplexDeals: proxy_failed
+  [FAIL] RedFlagDeals: proxy_failed
+  [FAIL] DealAM: no_rss
+  [FAIL] 21usDeal: no_rss
+  [FAIL] HotUKDeals: proxy_failed
+  [FAIL] HotShops IT: no_rss
+  [FAIL] SerialDealer: no_rss
+  [FAIL] DealBunny: no_rss
+  [FAIL] HotShops PL: proxy_failed
+  [FAIL] MiChollo: no_rss
+  [FAIL] Pelando: proxy_failed
+  [FAIL] LatestDeals: no_rss
+  [FAIL] WikiDeal: no_rss
+  [FAIL] Promobit: proxy_failed
+  [FAIL] OzBargain: no_rss
+  [FAIL] SoydeChollos: no_rss
+  [FAIL] DealSeek: no_rss
