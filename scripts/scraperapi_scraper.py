@@ -30,6 +30,7 @@ import html
 import ssl
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 import xml.etree.ElementTree as ET
 
@@ -230,77 +231,75 @@ def parse_html(page_source, site_info, keyword):
     return posts
 
 
+def scrape_site(site, keyword, api_key, timeout):
+    """Scrape a single site via ScraperAPI. Returns (site, posts)."""
+    q = urllib.parse.quote(keyword)
+    posts = []
+    # Try RSS first (structured data)
+    if site.get("rss"):
+        try:
+            resp = fetch_via_scraperapi(site["rss"].format(q=q), api_key,
+                                        render=True, country_code=site.get("cc"), timeout=timeout)
+            if resp.status_code == 200 and ("<item" in resp.text or "<rss" in resp.text):
+                posts = parse_rss(resp.text, site, keyword)
+                if not posts:
+                    posts = parse_rss_regex(resp.text, site, keyword)
+        except Exception:
+            pass
+    # Fallback to HTML search page
+    if not posts and site.get("html"):
+        try:
+            resp = fetch_via_scraperapi(site["html"].format(q=q), api_key,
+                                        render=True, country_code=site.get("cc"), timeout=timeout)
+            if resp.status_code == 200 and "just a moment" not in resp.text.lower() and "请稍候" not in resp.text:
+                posts = parse_html(resp.text, site, keyword)
+        except Exception:
+            pass
+    return site, posts
+
+
 def main():
     parser = argparse.ArgumentParser(description="ScraperAPI Deal Site Scraper (Strategy 4)")
     parser.add_argument("-k", "--keyword", required=True, help="Search keyword (e.g., anker)")
     parser.add_argument("--api-key", required=True, help="ScraperAPI API key")
     parser.add_argument("-c", "--countries", default="", help="Comma-separated country codes")
     parser.add_argument("--output", default="", help="Output file path")
-    parser.add_argument("--timeout", type=int, default=120, help="Per-request timeout in seconds")
+    parser.add_argument("--timeout", type=int, default=30, help="Per-request timeout in seconds")
+    parser.add_argument("--workers", type=int, default=15, help="Concurrent workers")
     args = parser.parse_args()
 
     keyword = args.keyword
     country_filter = [c.strip() for c in args.countries.split(",")] if args.countries else None
     sites = [s for s in SITES if not country_filter or s["country"] in country_filter]
 
-    print(f"ScraperAPI Scraper: keyword='{keyword}', {len(sites)} sites")
+    print(f"ScraperAPI Scraper: keyword='{keyword}', {len(sites)} sites, workers={args.workers}")
     print(f"API Key: {args.api_key[:8]}...{args.api_key[-4:]}")
 
-    # Test API key
+    # Quick API key check (short timeout, don't block on failure)
     print("\nTesting API key...")
     try:
-        resp = fetch_via_scraperapi("https://httpbin.org/ip", args.api_key, render=False, timeout=90)
+        resp = fetch_via_scraperapi("https://httpbin.org/ip", args.api_key, render=False, timeout=15)
         if resp.status_code == 200:
             print(f"  Valid! ({resp.text[:80]})")
         else:
-            print(f"  Warning: HTTP {resp.status_code}")
+            print(f"  Warning: HTTP {resp.status_code}, continuing anyway...")
     except Exception as e:
-        print(f"  Error: {e}")
-        return
+        print(f"  Warning: {e}, continuing anyway...")
 
+    # Concurrent scraping
     all_posts = []
-    for site in sites:
-        q = urllib.parse.quote(keyword)
-        posts = []
-
-        # Try RSS first (structured data)
-        if site.get("rss"):
-            print(f"\n  [{site['country'].upper()}] {site['site']} (RSS)...", end=" ", flush=True)
+    print(f"\nScraping {len(sites)} sites with {args.workers} workers...")
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures = {executor.submit(scrape_site, site, keyword, args.api_key, args.timeout): site for site in sites}
+        for future in as_completed(futures):
+            site = futures[future]
             try:
-                resp = fetch_via_scraperapi(site["rss"].format(q=q), args.api_key,
-                                           render=True, country_code=site.get("cc"), timeout=args.timeout)
-                if resp.status_code == 200 and ("<item" in resp.text or "<rss" in resp.text):
-                    posts = parse_rss(resp.text, site, keyword)
-                    if not posts:
-                        posts = parse_rss_regex(resp.text, site, keyword)
-                    print(f"FOUND {len(posts)}" if posts else "0 (no matches)")
-                elif resp.status_code == 404:
-                    print("404, trying HTML...", end=" ", flush=True)
-                else:
-                    print(f"HTTP {resp.status_code}")
+                _, posts = future.result()
+                all_posts.extend(posts)
+                status = f"FOUND {len(posts)}" if posts else "0"
+                print(f"  [{site['country'].upper()}] {site['site']}: {status}")
             except Exception as e:
-                print(f"ERROR: {str(e)[:60]}")
-
-        # Fallback to HTML search page
-        if not posts and site.get("html"):
-            if not site.get("rss"):
-                print(f"\n  [{site['country'].upper()}] {site['site']} (HTML)...", end=" ", flush=True)
-            try:
-                resp = fetch_via_scraperapi(site["html"].format(q=q), args.api_key,
-                                           render=True, country_code=site.get("cc"), timeout=args.timeout)
-                if resp.status_code == 200:
-                    if "just a moment" in resp.text.lower() or "请稍候" in resp.text:
-                        print("BLOCKED")
-                    else:
-                        posts = parse_html(resp.text, site, keyword)
-                        print(f"FOUND {len(posts)}" if posts else f"0 (anker appears {resp.text.lower().count(keyword)}x)")
-                else:
-                    print(f"HTTP {resp.status_code}")
-            except Exception as e:
-                print(f"ERROR: {str(e)[:60]}")
-
-        all_posts.extend(posts)
-        time.sleep(1)
+                print(f"  [{site['country'].upper()}] {site['site']}: ERROR {str(e)[:60]}")
 
     # Save results
     output_path = args.output or f"scraperapi_{keyword}_results.json"

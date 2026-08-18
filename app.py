@@ -217,6 +217,7 @@ def scraperapi_search():
     cmd += ["-k", keyword, "--api-key", api_key]
     if countries:
         cmd += ["-c", ",".join(countries)]
+    cmd += ["--workers", "15", "--timeout", "30"]
 
     job_id = str(uuid.uuid4())[:8]
     output_file = RESULTS_DIR / f"scraperapi_{job_id}.json"
