@@ -20,6 +20,26 @@ from flask import Flask, send_from_directory, jsonify, request
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
+# ─── Global error handlers (always return JSON) ──────────────────────────────
+
+@app.errorhandler(404)
+def not_found(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Not found", "path": request.path}), 404
+    return send_from_directory(app.static_folder, "index.html")
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({"error": "Method not allowed"}), 405
+
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({"error": "Internal server error", "detail": str(e)}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return jsonify({"error": "Unhandled exception", "detail": str(e)}), 500
+
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
