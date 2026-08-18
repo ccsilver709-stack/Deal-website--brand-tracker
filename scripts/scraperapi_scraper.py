@@ -182,6 +182,114 @@ def extract_metrics(html_context):
     return heat, votes, comments
 
 
+def extract_date(html_context):
+    """Extract publication date from HTML context. Returns (raw_date, parsed_date_str)."""
+    now = datetime.now(timezone.utc)
+
+    # 1. <time datetime="..."> or <time title="...">
+    for attr in ['datetime', 'title', 'data-date', 'data-timestamp', 'data-time']:
+        m = re.search(r'<time[^>]*' + attr + r'="([^"]+)"', html_context, re.I)
+        if m:
+            raw = m.group(1).strip()
+            dt = parse_date(raw)
+            if dt:
+                return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+            # Try unix timestamp
+            if raw.isdigit() and len(raw) >= 10:
+                try:
+                    ts = int(raw[:10])
+                    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+                except (ValueError, OSError):
+                    pass
+
+    # 2. JSON-LD or data attributes with ISO date
+    iso_patterns = [
+        r'"datePublished"\s*:\s*"([^"]+)"',
+        r'"dateCreated"\s*:\s*"([^"]+)"',
+        r'data-published="([^"]+)"',
+        r'data-submitted="([^"]+)"',
+        r'content="(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"',
+    ]
+    for p in iso_patterns:
+        m = re.search(p, html_context, re.I)
+        if m:
+            raw = m.group(1).strip()
+            dt = parse_date(raw)
+            if dt:
+                return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    # 3. Relative time — English
+    rel_patterns_en = [
+        (r'(\d+)\s*(?:min|minute|m)\s*(?:ago|old)', 'minutes'),
+        (r'(\d+)\s*(?:h|hour|hr)\s*(?:ago|old)', 'hours'),
+        (r'(\d+)\s*(?:d|day)\s*(?:ago|old)', 'days'),
+        (r'(\d+)\s*(?:w|week)\s*(?:ago|old)', 'weeks'),
+        (r'(\d+)\s*(?:mo|month)\s*(?:ago|old)', 'months'),
+        (r'just\s*now', 'just_now'),
+        (r'yesterday', 'yesterday'),
+    ]
+    # German
+    rel_patterns_de = [
+        (r'vor\s+(\d+)\s*(?:min|minute|m)', 'minutes'),
+        (r'vor\s+(\d+)\s*(?:h|stunde|std)', 'hours'),
+        (r'vor\s+(\d+)\s*(?:t|tag|tag)', 'days'),
+        (r'vor\s+(\d+)\s*(?:w|woche)', 'weeks'),
+        (r'gestern', 'yesterday'),
+    ]
+    # French
+    rel_patterns_fr = [
+        (r'il y a\s+(\d+)\s*(?:min|h|heure)', 'hours'),
+        (r'il y a\s+(\d+)\s*(?:j|jour)', 'days'),
+        (r'il y a\s+(\d+)\s*(?:semaine)', 'weeks'),
+        (r"hier", 'yesterday'),
+    ]
+    # Spanish / Portuguese
+    rel_patterns_es = [
+        (r'hace\s+(\d+)\s*(?:min|h|hora)', 'hours'),
+        (r'hace\s+(\d+)\s*(?:d|dia|día)', 'days'),
+        (r'hace\s+(\d+)\s*(?:semana)', 'weeks'),
+        (r'ayer', 'yesterday'),
+    ]
+    # Polish
+    rel_patterns_pl = [
+        (r'temu\s+(\d+)\s*(?:min|h|godz)', 'hours'),
+        (r'temu\s+(\d+)\s*(?:d|dzień)', 'days'),
+        (r'temu\s+(\d+)\s*(?:tydzień)', 'weeks'),
+    ]
+
+    all_patterns = rel_patterns_en + rel_patterns_de + rel_patterns_fr + rel_patterns_es + rel_patterns_pl
+    for pattern, unit in all_patterns:
+        m = re.search(pattern, html_context, re.I)
+        if m:
+            raw = m.group(0).strip()
+            if unit == 'just_now':
+                dt = now
+            elif unit == 'yesterday':
+                dt = now - timedelta(days=1)
+            else:
+                val = int(m.group(1))
+                delta = timedelta(**{unit: val})
+                dt = now - delta
+            return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    # 4. Absolute date patterns
+    abs_patterns = [
+        r'(\w{3}\s+\d{1,2},?\s+\d{4})',           # Aug 15, 2026
+        r'(\d{1,2}[\./]\d{1,2}[\./]\d{4})',         # 15.08.2026 / 15/08/2026
+        r'(\d{4}[\./-]\d{1,2}[\./-]\d{1,2})',       # 2026-08-15
+    ]
+    for p in abs_patterns:
+        m = re.search(p, html_context)
+        if m:
+            raw = m.group(1).strip()
+            dt = parse_date(raw)
+            if dt:
+                return raw, dt.strftime('%Y-%m-%d %H:%M %Z')
+
+    return "", ""
+
+
 def parse_date(date_str):
     if not date_str:
         return None
@@ -289,11 +397,12 @@ def parse_html(page_source, site_info, keyword):
             ctx_end = min(len(page_source), m.end() + 1200)
             context = page_source[ctx_start:ctx_end]
             heat, votes, comments = extract_metrics(context)
+            pub_date, pub_date_parsed = extract_date(context)
 
             posts.append({
                 "site": site_info["site"], "country": site_info["country"],
-                "title": text[:200], "link": full_link, "pub_date": "",
-                "pub_date_parsed": "", "price": extract_price(text),
+                "title": text[:200], "link": full_link, "pub_date": pub_date,
+                "pub_date_parsed": pub_date_parsed, "price": extract_price(text),
                 "heat": heat, "votes": votes, "comments": comments,
                 "summary": "", "source": "scraperapi_html",
             })
