@@ -51,6 +51,42 @@ python scripts/rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
 
 Pepper 站的🔥温度、投票数、评论数只在帖子页面上，需要用浏览器打开原帖提取。
 
+## 实测效果
+
+### 全量扫描（anker + --search-fallback）
+
+| 指标 | 数值 |
+|------|------|
+| 扫描站点 | 62 站 |
+| 成功站点 | 45 站（73%） |
+| 总匹配 | **154 条** |
+| 覆盖国家 | 🇦🇺70 / 🇬🇧42 / 🇨🇦21 / 🇺🇸19 / 🇩🇪2 |
+
+### 历史时间段搜索（anker 8/10-8/16）
+
+过滤后真正在日期范围内的 **27 条**，按站点分布：
+
+| 站点 | 数量 |
+|------|------|
+| HotUKDeals | 16 条 |
+| RedFlagDeals | 3 条 |
+| Hip2Save / Dealgott / Deals of America / TechBargains / ShopSale / OzBargain / LatestDeals / Slickdeals | 各 1 条 |
+
+### 浏览器补全后输出示例（带热度/赞/评论）
+
+| 国家 | 站点 | 帖子标题 | Deal价 | 🔥热度 | 👍赞/投票 | 评论 |
+|------|------|---------|--------|--------|----------|------|
+| 🇬🇧 | HotUKDeals | soundcore P30i Noise Cancelling Earbuds | £19.99 | **🔥78°** | — | **4** |
+| 🇬🇧 | HotUKDeals | Anker 100W USB C Charger 3-Port GaN | £39.99 | **🔥80°** | — | **0** |
+| 🇺🇸 | Slickdeals | Anker 20W 5-Port Nano Travel Power Adapter | $19.99 | — | **👍16** | **5** |
+| 🇬🇧 | LatestDeals | Soundcore Anker P40i ANC Earbuds | £35.98 | — | **👍27** | **0** |
+| 🇨🇦 | RedFlagDeals | Anker 737 Power Bank + Charger + Cable Bundle | $65.69 | — | **+4 (👍13👎9)** | **多页** |
+| 🇦🇺 | OzBargain | Anker Solix C1000 Power Station 1056Wh | $699 | — | **+45** | 有评论 |
+| 🇩🇪 | Mein-Deal | Anker Zolo 4-Port USB-C Ladegerät 50W | €25.97 | — | — | **4** |
+| 🇺🇸 | Hip2Save | Anker Wireless Earbuds on Amazon | $19.98 | — | — | **0** |
+
+> WordPress 站（Mein-Deal/Hip2Save/Dealgott 等 20+ 站）评论数脚本自动从 RSS 提取；Pepper 站热度/投票需浏览器打开原帖补全。
+
 ## 给 AI 助手用
 
 把 `SKILL.md` 丢给任何 AI 助手（ChatGPT / Claude / Doubao 等），它会按流程自动完成 RSS 抓取 + 互动数据补全 + 表格输出。
