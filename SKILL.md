@@ -29,17 +29,18 @@ description: 全球 Deal 站品牌关键词监测工具。输入品牌/产品关
 #### 方式 A：运行脚本（有 Python 环境时）
 
 ```bash
-python scripts/rss_fetch.py -k "品牌词1" -k "品牌词2" -c us,de,uk --timeout 12
+python scripts/rss_fetch.py -k "品牌词1" -k "品牌词2" -c us,de,uk --search-fallback
 ```
 
 参数：
 - `-k` / `--keyword`：品牌关键词，可多次传入（如 `-k anker -k soundcore`）
 - `-c` / `--countries`：国家代码过滤，逗号分隔（us,ca,de,uk,fr,it,es,mx,pl,br,au），不传则扫全部
-- `--timeout`：单站请求超时秒数，默认 12
+- `--timeout`：单站请求超时秒数，默认 10
 - `--output json|csv`：输出格式，默认 JSON
-- `--search-fallback`：RSS 失败的站点自动用 Google News 搜索回退，覆盖更全但结果可能不精准
+- `--search-fallback`：RSS 失败站点用 Google News 搜索回退（只匹配标题，减少噪音）
+- `--workers`：并发线程数，默认 10（全量 62 站 1-2 分钟完成）
 
-脚本纯 Python 标准库，无第三方依赖。输出 JSON 包含 `posts` 数组，每条含：
+脚本纯 Python 标准库，无第三方依赖，**10 线程并发抓取**。输出 JSON 包含 `posts` 数组，每条含：
 - `site/domain/country/title/link/pub_date/summary` — 基础信息
 - `comments_count` — 评论数（WordPress 站已自动从 RSS 提取）
 - `temperature` — 温度/热度（Pepper 站为空，需第二步补全）
