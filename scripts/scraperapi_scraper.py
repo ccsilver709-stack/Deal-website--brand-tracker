@@ -393,8 +393,8 @@ def parse_html(page_source, site_info, keyword):
             base = site_info["html"].split("/search")[0].rsplit("/", 2)[0]
             full_link = href if href.startswith("http") else base + href if href.startswith("/") else base + "/" + href
 
-            ctx_start = max(0, m.start() - 1200)
-            ctx_end = min(len(page_source), m.end() + 1200)
+            ctx_start = max(0, m.start() - 1500)
+            ctx_end = min(len(page_source), m.end() + 1500)
             context = page_source[ctx_start:ctx_end]
             heat, votes, comments = extract_metrics(context)
             pub_date, pub_date_parsed = extract_date(context)

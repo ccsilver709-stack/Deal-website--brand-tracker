@@ -536,8 +536,8 @@ def search_site_direct(site_info, keywords, timeout=10):
             if full_url not in seen and '/search' not in full_url.lower():
                 seen.add(full_url)
                 # Extract date from surrounding HTML context
-                ctx_start = max(0, m.start() - 800)
-                ctx_end = min(len(content), m.end() + 800)
+                ctx_start = max(0, m.start() - 1500)
+                ctx_end = min(len(content), m.end() + 1500)
                 context = content[ctx_start:ctx_end]
                 pub_date, pub_date_parsed = extract_date_from_html(context)
                 results.append((text, full_url, pub_date, pub_date_parsed))
