@@ -55,6 +55,13 @@ python scripts/rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
 ```
 脚本会先跑 RSS，再对无匹配站点自动用搜索引擎限定时间范围搜索，合并结果输出。
 
+**⚠️ Pepper 站重要说明**：
+Slickdeals、HotUKDeals、RedFlagDeals、MyDealz、Dealabs、Chollometro、Promodescuentos、Pepper.pl、Pelando、Promobit 这 10 个 Pepper 网络站是 deal 站流量最大的，但约一半被 Cloudflare 全站 403 保护，纯 Python 脚本直连 RSS 经常失败。
+- **能直连的**：MyDealz、Dealabs、Chollometro、Promodescuentos、Pepper.pl（约 5 个，视网络情况波动）
+- **被 Cloudflare 挡的**：Slickdeals、HotUKDeals、RedFlagDeals、Pelando、Promobit（约 5 个）
+- **解决方案**：加 `--search-fallback` 或 `--date-from/--date-to`，脚本对 RSS 失败的 Pepper 站自动用 Google News 搜索回退，抓搜索引擎缓存结果绕过 Cloudflare。测试验证 anker 限定 8/10-8/16 回退找到 Slickdeals 7 条、HotUKDeals 8 条、RedFlagDeals 3 条。
+- **热度/温度**：Pepper 站的🔥温度、投票数、评论数只在帖子页面上，RSS 和搜索引擎都不提供，必须第二步用浏览器打开原帖提取。
+
 #### 方式 B：手动请求 RSS（无脚本环境时）
 
 对每个站点，请求其 RSS URL（见下方"站点 RSS 速查表"），返回的 XML 中：

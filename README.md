@@ -35,6 +35,22 @@ python scripts/rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
 
 脚本会先跑 RSS，再对无匹配站点自动用 Bing + Google News 限定时间范围搜索，合并输出。测试验证：anker 限定 8/10-8/16 找到 30 条，覆盖 Slickdeals/HotUKDeals/RedFlagDeals/LatestDeals/OzBargain 等 8 站。
 
+### Pepper 站推荐用法
+
+Slickdeals、HotUKDeals、MyDealz、Dealabs 等 10 个 Pepper 网络站是流量最大的 deal 站，但约一半被 Cloudflare 保护，纯 RSS 直连经常失败。
+
+**推荐加 `--search-fallback` 或 `--date-from/--date-to`**，脚本会对失败的 Pepper 站自动用搜索引擎回退，抓 Google/Bing 缓存绕过 Cloudflare。
+
+```bash
+# 近期帖：加回退参数
+python scripts/rss_fetch.py -k anker --search-fallback
+
+# 历史帖：用日期范围
+python scripts/rss_fetch.py -k anker --date-from 2026-08-10 --date-to 2026-08-16
+```
+
+Pepper 站的🔥温度、投票数、评论数只在帖子页面上，需要用浏览器打开原帖提取。
+
 ## 给 AI 助手用
 
 把 `SKILL.md` 丢给任何 AI 助手（ChatGPT / Claude / Doubao 等），它会按流程自动完成 RSS 抓取 + 互动数据补全 + 表格输出。
