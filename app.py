@@ -141,7 +141,7 @@ def search():
         cmd += ["--date-from", date_from]
     if date_to:
         cmd += ["--date-to", date_to]
-    cmd += ["--timeout", "8", "--workers", "20", "--search-fallback", "--output", "json"]
+    cmd += ["--timeout", "5", "--workers", "30", "--search-fallback", "--output", "json"]
 
     # Output to temp file
     job_id = str(uuid.uuid4())[:8]

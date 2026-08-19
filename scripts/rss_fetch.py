@@ -561,11 +561,13 @@ def fetch_site(site_info, keywords, timeout, search_fallback, date_from, date_to
     """
     Fetch deals from a single site.
     Strategy:
-      1. RSS (8s, urllib only, no retry)
-      2. If RSS fails AND search_fallback enabled:
-         - Pepper sites: skip (use ScraperAPI)
-         - Non-Pepper: Google + Google News in PARALLEL (~10s)
+      1. Pepper sites: skip RSS directly (Cloudflare blocks it), use ScraperAPI
+      2. Non-Pepper: try RSS (5s), then site search fallback (~6s)
     """
+    # Pepper sites are known to block RSS — skip directly to save time
+    if site_info.get("pepper", False):
+        return site_info, [], "skipped_pepper", "Cloudflare (use ScraperAPI)"
+
     rss_url = site_info["rss_url"].format(
         q=urllib.parse.quote(keywords[0]) if keywords else ""
     )
@@ -580,14 +582,10 @@ def fetch_site(site_info, keywords, timeout, search_fallback, date_from, date_to
                 p["source"] = "rss"
             return site_info, posts, f"rss ({backend})", None
 
-    # 2. RSS failed — skip Pepper sites (they need ScraperAPI)
-    if site_info.get("pepper", False):
-        return site_info, [], "skipped_pepper", "Cloudflare (use ScraperAPI)"
-
-    # 3. Non-Pepper: direct site search fallback (if enabled)
+    # 2. Non-Pepper: direct site search fallback (if enabled)
     if search_fallback:
         results = search_fallback_parallel(
-            site_info["domain"], keywords, timeout=10, site_info=site_info
+            site_info["domain"], keywords, timeout=6, site_info=site_info
         )
         if results:
             posts = []
