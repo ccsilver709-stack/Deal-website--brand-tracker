@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,43 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
 RESULTS_DIR = Path(__file__).parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
+
+# ─── Async Task Store ────────────────────────────────────────────────────────
+tasks = {}  # task_id -> {status, result, error, log, created_at}
+
+def run_scraperapi_task(task_id, cmd, output_file, date_from, date_to, subprocess_timeout):
+    """Run scraperapi in background thread and store result."""
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=subprocess_timeout,
+            cwd=str(SCRIPTS_DIR)
+        )
+        posts = []
+        if output_file.exists():
+            with open(output_file, "r", encoding="utf-8") as f:
+                results = json.load(f)
+            output_file.unlink(missing_ok=True)
+            posts = results.get("posts", [])
+        else:
+            stdout = result.stdout or ""
+            try:
+                json_start = stdout.find("{")
+                if json_start >= 0:
+                    results = json.loads(stdout[json_start:])
+                    posts = results.get("posts", [])
+            except json.JSONDecodeError:
+                pass
+        posts = filter_posts_by_date(posts, date_from, date_to)
+        tasks[task_id] = {
+            "status": "done",
+            "posts": posts,
+            "log": (result.stdout or "")[-3000:],
+            "stderr": (result.stderr or "")[-1000:],
+        }
+    except subprocess.TimeoutExpired:
+        tasks[task_id] = {"status": "error", "error": "Search timed out", "posts": []}
+    except Exception as e:
+        tasks[task_id] = {"status": "error", "error": str(e), "posts": []}
 
 # ─── Countries ───────────────────────────────────────────────────────────────
 
@@ -192,15 +230,8 @@ def search():
 @app.route("/api/scraperapi", methods=["POST"])
 def scraperapi_search():
     """
-    Run scraperapi_scraper.py with the given API key.
-    Expected JSON body:
-      {
-        "keyword": "anker",             # required
-        "api_key": "c8ccc707...",        # required
-        "countries": ["us","de","uk"],   # optional
-        "date_from": "2026-08-10",       # optional, post-filter
-        "date_to": "2026-08-16",         # optional, post-filter
-      }
+    Submit scraperapi search as async task (ModelScope proxy has ~20s timeout).
+    Returns task_id immediately, poll /api/scraperapi/status/<task_id> for result.
     """
     data = request.get_json(force=True)
     keyword = data.get("keyword", "").strip()
@@ -216,10 +247,8 @@ def scraperapi_search():
     date_to = data.get("date_to", "")
     full_mode = data.get("full_mode", False)
 
-    # Fast mode: 10s per request (ModelScope proxy ~20s timeout), 120s total
-    # Full mode: 45s per request (JS rendering needs more), 300s total
-    per_request_timeout = 45 if full_mode else 10
-    subprocess_timeout = 300 if full_mode else 120
+    per_request_timeout = 45 if full_mode else 15
+    subprocess_timeout = 300 if full_mode else 180
 
     cmd = [sys.executable, str(SCRIPTS_DIR / "scraperapi_scraper.py")]
     cmd += ["-k", keyword, "--api-key", api_key]
@@ -229,56 +258,29 @@ def scraperapi_search():
     if full_mode:
         cmd += ["--full-mode"]
 
-    job_id = str(uuid.uuid4())[:8]
-    output_file = RESULTS_DIR / f"scraperapi_{job_id}.json"
+    task_id = str(uuid.uuid4())[:8]
+    output_file = RESULTS_DIR / f"scraperapi_{task_id}.json"
     cmd += ["--output", str(output_file)]
 
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=subprocess_timeout,
-            cwd=str(SCRIPTS_DIR)
-        )
+    tasks[task_id] = {"status": "running", "posts": [], "created_at": datetime.now().isoformat()}
 
-        if output_file.exists():
-            with open(output_file, "r", encoding="utf-8") as f:
-                results = json.load(f)
-            output_file.unlink(missing_ok=True)
-            posts = results.get("posts", [])
-            posts = filter_posts_by_date(posts, date_from, date_to)
-            return jsonify({
-                "ok": True,
-                "posts": posts,
-                "log": result.stdout[-3000:] if result.stdout else ""
-            })
-        else:
-            # Try to parse from stdout
-            stdout = result.stdout or ""
-            try:
-                # Look for JSON in stdout
-                json_start = stdout.find("{")
-                if json_start >= 0:
-                    results = json.loads(stdout[json_start:])
-                    posts = filter_posts_by_date(results.get("posts", []), date_from, date_to)
-                    return jsonify({
-                        "ok": True,
-                        "posts": posts,
-                        "log": stdout
-                    })
-            except json.JSONDecodeError:
-                pass
+    t = threading.Thread(
+        target=run_scraperapi_task,
+        args=(task_id, cmd, output_file, date_from, date_to, subprocess_timeout),
+        daemon=True
+    )
+    t.start()
 
-            return jsonify({
-                "ok": True,
-                "posts": [],
-                "log": stdout[-3000:] if stdout else "No output",
-                "stderr": result.stderr[-1000:] if result.stderr else ""
-            })
+    return jsonify({"ok": True, "task_id": task_id, "status": "running"})
 
-    except subprocess.TimeoutExpired:
-        mode_label = "Full mode" if full_mode else "Fast mode"
-        return jsonify({"error": f"{mode_label} search timed out ({subprocess_timeout}s limit)"}), 504
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scraperapi/status/<task_id>", methods=["GET"])
+def scraperapi_status(task_id):
+    """Poll async task status."""
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    return jsonify(task)
 
 
 @app.route("/api/health")

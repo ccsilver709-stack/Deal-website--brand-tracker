@@ -643,10 +643,11 @@ async function searchScraperAPI() {
   const countries = Array.from(selectedCountries);
   const fullMode = document.getElementById("api-full-mode").checked;
 
-  showLoading(fullMode ? "Fetching with JS rendering (heat data)... this takes ~2 min" : "Bypassing Cloudflare via ScraperAPI (fast mode)...");
+  showLoading(fullMode ? "Fetching with JS rendering (heat data)... this takes ~2 min" : "Bypassing Cloudflare via ScraperAPI... polling for results");
   hideError();
 
   try {
+    // Submit async task (ModelScope proxy has ~20s timeout, can't wait synchronously)
     const res = await fetch("/api/scraperapi", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -657,15 +658,49 @@ async function searchScraperAPI() {
       })
     });
     const data = await res.json();
-    hideLoading();
 
     if (data.error) {
+      hideLoading();
       showError(data.error);
       return;
     }
-    allPosts = data.posts || [];
-    currentLog = data.log || "";
-    renderResults(allPosts, {});
+
+    const taskId = data.task_id;
+    let pollCount = 0;
+    const maxPolls = 90; // 90 * 2s = 3 min max
+
+    // Poll for results
+    const poll = async () => {
+      pollCount++;
+      if (pollCount > maxPolls) {
+        hideLoading();
+        showError("Search timed out after 3 minutes. Try fewer countries or use RSS mode.");
+        return;
+      }
+      try {
+        const statusRes = await fetch(`/api/scraperapi/status/${taskId}`);
+        const statusData = await statusRes.json();
+
+        if (statusData.status === "done") {
+          hideLoading();
+          allPosts = statusData.posts || [];
+          currentLog = statusData.log || "";
+          renderResults(allPosts, {});
+        } else if (statusData.status === "error") {
+          hideLoading();
+          showError(statusData.error || "Search failed");
+        } else {
+          // Still running, update loading text with elapsed time
+          const elapsed = pollCount * 2;
+          showLoading(`ScraperAPI searching... ${elapsed}s elapsed (this can take 30-60s)`);
+          setTimeout(poll, 2000);
+        }
+      } catch(e) {
+        setTimeout(poll, 2000);
+      }
+    };
+    setTimeout(poll, 2000);
+
   } catch(e) {
     hideLoading();
     showError("Request failed: " + e.message);
