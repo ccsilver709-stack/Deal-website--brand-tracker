@@ -216,9 +216,9 @@ def scraperapi_search():
     date_to = data.get("date_to", "")
     full_mode = data.get("full_mode", False)
 
-    # Fast mode: 20s per request, 120s total subprocess timeout
+    # Fast mode: 10s per request (ModelScope proxy ~20s timeout), 120s total
     # Full mode: 45s per request (JS rendering needs more), 300s total
-    per_request_timeout = 45 if full_mode else 20
+    per_request_timeout = 45 if full_mode else 10
     subprocess_timeout = 300 if full_mode else 120
 
     cmd = [sys.executable, str(SCRIPTS_DIR / "scraperapi_scraper.py")]

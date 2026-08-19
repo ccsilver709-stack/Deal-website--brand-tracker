@@ -46,31 +46,31 @@ CN_TZ = timezone(timedelta(hours=8))
 # All deal sites covered by the skill
 SITES = [
     # Pepper network
-    {"site": "Slickdeals", "country": "us", "cc": "us",
+    {"site": "Slickdeals", "country": "us", "cc": "us", "pepper": True,
      "rss": "https://slickdeals.net/rss/search?q={q}",
      "html": "https://slickdeals.net/search?q={q}&sort=newest"},
-    {"site": "MyDealz", "country": "de", "cc": "de",
+    {"site": "MyDealz", "country": "de", "cc": "de", "pepper": True,
      "rss": "https://www.mydealz.de/rss/search?q={q}",
      "html": "https://www.mydealz.de/search?q={q}"},
-    {"site": "HotUKDeals", "country": "uk", "cc": "gb",
+    {"site": "HotUKDeals", "country": "uk", "cc": "gb", "pepper": True,
      "rss": "https://www.hotukdeals.com/rss/search?q={q}",
      "html": "https://www.hotukdeals.com/search?q={q}"},
-    {"site": "Dealabs", "country": "fr", "cc": "fr",
+    {"site": "Dealabs", "country": "fr", "cc": "fr", "pepper": True,
      "rss": "https://www.dealabs.com/rss/search?q={q}",
      "html": "https://www.dealabs.com/search?q={q}"},
-    {"site": "Chollometro", "country": "es", "cc": "es",
+    {"site": "Chollometro", "country": "es", "cc": "es", "pepper": True,
      "rss": "https://www.chollometro.com/rss/search?q={q}",
      "html": "https://www.chollometro.com/search?q={q}"},
-    {"site": "Promodescuentos", "country": "mx", "cc": "mx",
+    {"site": "Promodescuentos", "country": "mx", "cc": "mx", "pepper": True,
      "rss": "https://www.promodescuentos.com/rss/search?q={q}",
      "html": "https://www.promodescuentos.com/search?q={q}"},
-    {"site": "Pepper.pl", "country": "pl", "cc": "pl",
+    {"site": "Pepper.pl", "country": "pl", "cc": "pl", "pepper": True,
      "rss": "https://www.pepper.pl/rss/search?q={q}",
      "html": "https://www.pepper.pl/search?q={q}"},
-    {"site": "Pelando", "country": "br", "cc": "br",
+    {"site": "Pelando", "country": "br", "cc": "br", "pepper": True,
      "rss": "https://www.pelando.com.br/rss/search?q={q}",
      "html": "https://www.pelando.com.br/search?q={q}"},
-    {"site": "Promobit", "country": "br", "cc": "br",
+    {"site": "Promobit", "country": "br", "cc": "br", "pepper": True,
      "rss": "https://www.promobit.com.br/rss/search?q={q}",
      "html": "https://www.promobit.com.br/search?q={q}"},
     # Independent sites
@@ -426,7 +426,8 @@ def process_site(site, keyword, api_key, timeout=30, full_mode=False):
     posts = []
 
     # 1. Try RSS first (render=false — RSS is XML, no JS needed, very fast)
-    if site.get("rss"):
+    # Skip RSS for Pepper sites — Cloudflare blocks RSS, it's a waste of time
+    if site.get("rss") and not site.get("pepper", False):
         try:
             resp = fetch_via_scraperapi(
                 site["rss"].format(q=q), api_key,
